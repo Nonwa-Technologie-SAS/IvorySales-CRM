@@ -1,0 +1,213 @@
+// Prisma schema pour CRM Next.js avec PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  plan      String   @default("free")
+  createdAt DateTime @default(now())
+
+  users    User[]
+  leads    Lead[]
+  deals    Deal[]
+  clients  Client[]
+  products Product[]
+  services Service[]
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  name      String
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  createdAt DateTime @default(now())
+  leads     Lead[]   @relation("LeadProducts")
+  /// Intérêts exprimés par les clients pour ce produit, avec valeur estimative
+  clientInterests ClientProductInterest[]
+}
+
+model Service {
+  id        String   @id @default(cuid())
+  name      String
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  createdAt DateTime @default(now())
+  leads     Lead[]   @relation("LeadServices")
+  /// Intérêts exprimés par les clients pour ce service, avec valeur estimative
+  clientInterests ClientServiceInterest[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(AGENT)
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities Activity[]
+}
+
+model Lead {
+  id         String   @id @default(cuid())
+  firstName  String
+  lastName   String
+  phone      String?
+  email      String?
+  source     String?
+  /// Civilité (ex: M., Mme) issue du fichier Excel
+  civility   String?
+  /// Domaine d'activités du lead (secteur)
+  activityDomain String?
+  /// Nom de la compagnie au moment de la création du lead
+  companyName String?
+  /// Adresse / localisation (utile pour l'affichage sur la carte)
+  location   String?
+  /// Notes libres (ex: observation du fichier Excel)
+  notes      String?
+  status     LeadStatus @default(NEW)
+  assignedTo String?
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+  createdAt DateTime @default(now())
+
+  activities Activity[]
+  /// Produits pour lesquels le prospect a exprimé un intérêt
+  products   Product[] @relation("LeadProducts")
+  /// Services pour lesquels le prospect a exprimé un intérêt
+  services   Service[] @relation("LeadServices")
+  /// Pièces jointes (fichiers) associées au prospect
+  attachments LeadAttachment[]
+}
+
+/// Pièce jointe d'un prospect (fichier uploadé)
+model LeadAttachment {
+  id          String   @id @default(cuid())
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId      String
+  fileName    String
+  /// Type / extension du fichier (PDF, JPG, PNG, etc.)
+  fileType    String
+  /// Taille en octets
+  fileSize    Int
+  /// Chemin de stockage (ex: /uploads/leads/xxx/filename.pdf)
+  storagePath String
+  createdAt   DateTime @default(now())
+}
+
+model Deal {
+  id         String   @id @default(cuid())
+  title      String
+  amount     Float
+  stage      String
+  probability Int?
+  expectedCloseDate DateTime?
+  assignedTo String?
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  /// Contact principal (téléphone ou email synthétique)
+  contact   String?
+  /// Email du client (copié depuis le lead)
+  email     String?
+  /// Téléphone du client (copié depuis le lead)
+  phone     String?
+  /// Source d'acquisition (ex: Facebook, WhatsApp, Site web...)
+  source    String?
+  /// Civilité (M., Mme, etc.)
+  civility  String?
+  /// Domaine d'activités (secteur)
+  activityDomain String?
+  /// Nom de la société côté client (copié depuis companyName du lead)
+  companyName    String?
+  /// Localisation / adresse
+  location       String?
+  /// Notes sur le client (observations)
+  notes          String?
+  /// Chiffre d'affaires total généré par ce client
+  totalRevenue Float  @default(0)
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  companyId String
+
+  /// Produits pour lesquels le client est intéressé, avec valeur estimative
+  productInterests ClientProductInterest[]
+  /// Services pour lesquels le client est intéressé, avec valeur estimative
+  serviceInterests ClientServiceInterest[]
+}
+
+/// Lien entre un client et un produit, avec une valeur estimative associée
+model ClientProductInterest {
+  id            String   @id @default(cuid())
+  client        Client   @relation(fields: [clientId], references: [id])
+  clientId      String
+  product       Product  @relation(fields: [productId], references: [id])
+  productId     String
+  /// Valeur estimative associée à ce produit pour ce client
+  estimatedValue Float   @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([clientId, productId])
+}
+
+/// Lien entre un client et un service, avec une valeur estimative associée
+model ClientServiceInterest {
+  id            String   @id @default(cuid())
+  client        Client   @relation(fields: [clientId], references: [id])
+  clientId      String
+  service       Service  @relation(fields: [serviceId], references: [id])
+  serviceId     String
+  /// Valeur estimative associée à ce service pour ce client
+  estimatedValue Float   @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([clientId, serviceId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      ActivityType
+  relatedTo String
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  leadId    String?
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  date      DateTime @default(now())
+  content   String
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  LOST
+  CONVERTED
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  WHATSAPP
+  MEETING
+  NOTE
+}

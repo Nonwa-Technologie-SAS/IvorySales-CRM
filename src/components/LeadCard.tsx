@@ -1,0 +1,95 @@
+"use client";
+
+import { motion } from "framer-motion";
+import TextToSpeech from "./TextToSpeech";
+
+export interface Lead {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  status: string;
+  source?: string | null;
+  notes?: string | null;
+  companyName?: string | null;
+  location?: string | null;
+  activityDomain?: string | null;
+  civility?: string | null;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "Nouveau",
+  CONTACTED: "Contacté",
+  QUALIFIED: "Qualifié",
+  LOST: "Perdu",
+  CONVERTED: "Converti",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  NEW: "bg-blue-100 text-blue-700 border border-blue-200",
+  CONTACTED: "bg-amber-100 text-amber-800 border border-amber-200",
+  QUALIFIED: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  LOST: "bg-rose-100 text-rose-700 border border-rose-200",
+  CONVERTED: "bg-teal-100 text-teal-700 border border-teal-200",
+};
+
+interface LeadCardProps {
+  lead: Lead;
+  onClick?: () => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+}
+
+export default function LeadCard({ lead, onClick, draggable, onDragStart }: LeadCardProps) {
+  const initials = `${lead.firstName?.[0] ?? ""}${lead.lastName?.[0] ?? ""}`.toUpperCase();
+  const statusLabel = STATUS_LABELS[lead.status] ?? lead.status;
+
+  return (
+    <motion.div
+      onClick={onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      className={`relative bg-white/80 rounded-2xl border border-white/70 shadow-neu-soft flex flex-col gap-3 cursor-pointer hover:-translate-y-0.5 hover:shadow-neu transition-all p-4 ${
+        draggable ? "cursor-grab active:cursor-grabbing" : ""
+      }`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-xs font-semibold shadow-neu shrink-0">
+            {initials}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <h3 className="text-sm md:text-base font-semibold text-primary truncate">
+              {lead.firstName} {lead.lastName}
+            </h3>
+            <p className="text-[11px] text-gray-500 truncate">{lead.email}</p>
+          </div>
+        </div>
+        <span
+          className={`px-3 py-1 rounded-full text-[10px] md:text-[11px] font-medium border shadow-neu whitespace-nowrap ${
+            STATUS_STYLES[lead.status] ?? "bg-gray-50 border-gray-100 text-gray-600"
+          }`}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      {lead.phone && (
+        <p className="text-[11px] md:text-xs text-gray-500">{lead.phone}</p>
+      )}
+
+      {lead.notes && (
+        <p className="text-xs md:text-sm text-gray-600 line-clamp-3 mt-1">{lead.notes}</p>
+      )}
+      {lead.notes && (
+        <div className="mt-1">
+          <TextToSpeech text={lead.notes} />
+        </div>
+      )}
+    </motion.div>
+  );
+}
