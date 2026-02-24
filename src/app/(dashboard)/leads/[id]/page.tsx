@@ -3,6 +3,7 @@
 import CreateEmailModal from "@/components/CreateEmailModal";
 import EmailsTabContent from "@/components/EmailsTabContent";
 import InteractionHistory, { type Activity } from "@/components/InteractionHistory";
+import AgendaTab from "@/components/AgendaTab";
 import type { Lead } from "@/components/LeadCard";
 import LeadAttachmentsBlock from "@/components/lead-attachments/LeadAttachmentsBlock";
 import LeadEditSheet from "@/components/LeadEditSheet";
@@ -58,10 +59,10 @@ const LIFECYCLE_STAGES = [
 
 const ACTIVITY_TABS = [
   { key: "activity", label: "Activité", filterType: undefined },
+  { key: "agenda", label: "Agenda", filterType: undefined },
   { key: "notes", label: "Notes", filterType: "NOTE" },
   { key: "emails", label: "Emails", filterType: "EMAIL" },
   { key: "calls", label: "Appels", filterType: "CALL" },
-  { key: "task", label: "Tâches", filterType: "NOTE" },
   { key: "meetings", label: "Rendez-vous", filterType: "MEETING" },
 ];
 
@@ -83,6 +84,8 @@ interface LeadDetail {
   activities: Activity[];
   products?: { id: string; name: string }[];
   services?: { id: string; name: string }[];
+  activitiesTotal?: number;
+  hasMoreActivities?: boolean;
 }
 
 export default function LeadDetailPage() {
@@ -327,7 +330,7 @@ export default function LeadDetailPage() {
 
             <NeumoCard className="p-4 flex flex-col gap-4">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-2xl font-semibold shadow-neu">
+                <div className="w-20 h-20 rounded-full bg-linear-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-2xl font-semibold shadow-neu">
                   {initials}
                 </div>
                 <div className="text-center">
@@ -392,6 +395,10 @@ export default function LeadDetailPage() {
                           text: "Prospect converti en client avec succès.",
                         });
                         setTimeout(() => setConvertMessage(null), 5000);
+                        // Rafraîchir les objectifs sur le dashboard (Mon objectif)
+                        if (typeof window !== "undefined") {
+                          window.dispatchEvent(new CustomEvent("crm:goals-invalidate"));
+                        }
                       } catch (e) {
                         setConvertMessage({
                           type: "error",
@@ -539,7 +546,9 @@ export default function LeadDetailPage() {
                 ))}
               </div>
               <div className="flex-1 min-h-[200px] overflow-y-auto">
-                {activeTab === "emails" ? (
+                {activeTab === "agenda" ? (
+                  <AgendaTab leadId={lead.id} />
+                ) : activeTab === "emails" ? (
                   <EmailsTabContent
                     emails={lead.activities.filter((a) => a.type === "EMAIL")}
                     loading={false}
@@ -568,20 +577,8 @@ export default function LeadDetailPage() {
                   <InteractionHistory
                     lead={leadAsLead}
                     filterType={ACTIVITY_TABS.find((t) => t.key === activeTab)?.filterType}
-                    title={
-                      activeTab === "calls"
-                        ? "Journal des appels"
-                        : activeTab === "task"
-                        ? "Tâches"
-                        : undefined
-                    }
-                    initialType={
-                      activeTab === "calls"
-                        ? "CALL"
-                        : activeTab === "task"
-                        ? "NOTE"
-                        : undefined
-                    }
+                    title={activeTab === "calls" ? "Journal des appels" : undefined}
+                    initialType={activeTab === "calls" ? "CALL" : undefined}
                     onActivityAdded={(a) =>
                       setLead((prev) =>
                         prev ? { ...prev, activities: [a, ...prev.activities] } : prev

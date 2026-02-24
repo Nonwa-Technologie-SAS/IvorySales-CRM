@@ -188,6 +188,30 @@ export default function ClientViewSheet({
               </div>
             </div>
 
+            {/* Converti par — traçabilité conversion */}
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/90 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-500">Converti par</span>
+                <span className="text-gray-800 font-medium">
+                  {client.convertedBy?.name ?? "Non renseigné"}
+                </span>
+              </div>
+              {client.convertedAt && (
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-gray-500">Date de conversion</span>
+                  <span className="text-gray-700">
+                    {new Date(client.convertedAt).toLocaleDateString("fr-FR", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* 3. Contexte commercial — société, source, secteur */}
             <div className="rounded-2xl border border-gray-100 bg-gray-50/90 px-4 py-3 space-y-2">
               <div className="flex items-center gap-2 mb-2">

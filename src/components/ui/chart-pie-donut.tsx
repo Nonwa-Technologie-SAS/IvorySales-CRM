@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Pie, PieChart } from 'recharts';
 
 import {
@@ -19,7 +19,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 
-export const description = "Répartition des statuts de leads";
+export const description = 'Répartition des statuts de leads';
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Nouveau',
@@ -91,11 +91,13 @@ export function ChartPieDonut() {
           }
         }
 
-        const chartData = Object.entries(counts).map(([status, count], index) => ({
-          status,
-          count,
-          fill: `var(--chart-${index + 1})`,
-        }));
+        const chartData = Object.entries(counts).map(
+          ([status, count], index) => ({
+            status,
+            count,
+            fill: `var(--chart-${index + 1})`,
+          }),
+        );
 
         const sum = chartData.reduce((acc, d) => acc + d.count, 0);
         if (sum > 0) {
@@ -109,21 +111,21 @@ export function ChartPieDonut() {
   }, []);
 
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="items-center pb-0">
+    <Card className='flex flex-col'>
+      <CardHeader className='items-center pb-0'>
         <CardTitle>Répartition des statuts</CardTitle>
         <CardDescription>Vue globale des leads par statut</CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 pb-0 flex flex-col gap-4 px-6 pt-2">
+      <CardContent className='flex-1 pb-0 flex flex-col gap-4 px-6 pt-2'>
         {/* Légende au-dessus du graphique (avec effectif par compartiment) */}
-        <div className="flex flex-wrap items-center justify-center gap-3 gap-y-1.5">
+        <div className='flex flex-wrap items-center justify-center gap-3 gap-y-1.5'>
           {data.map((d) => (
-            <div key={d.status} className="flex items-center gap-1.5">
+            <div key={d.status} className='flex items-center gap-1.5'>
               <span
-                className="w-3 h-3 rounded-sm shrink-0"
+                className='w-3 h-3 rounded-sm shrink-0'
                 style={{ backgroundColor: d.fill }}
               />
-              <span className="text-[11px] text-gray-700">
+              <span className='text-[11px] text-gray-700'>
                 {STATUS_LABELS[d.status] ?? d.status}
                 {d.count >= 0 && ` (${d.count})`}
               </span>
@@ -132,7 +134,7 @@ export function ChartPieDonut() {
         </div>
         <ChartContainer
           config={chartConfig}
-          className="mx-auto w-full min-h-[250px] h-[250px]"
+          className='mx-auto w-full min-h-[250px] h-[250px]'
         >
           <PieChart>
             <ChartTooltip
@@ -141,23 +143,23 @@ export function ChartPieDonut() {
             />
             <Pie
               data={data}
-              dataKey="count"
-              nameKey="status"
+              dataKey='count'
+              nameKey='status'
               innerRadius={60}
               outerRadius={80}
-              paddingAngle={5}
-              stroke="white"
-              strokeWidth={1.5}
+              // paddingAngle={5}
+              // stroke='white'
+              // strokeWidth={1.5}
             />
           </PieChart>
         </ChartContainer>
       </CardContent>
-      <CardFooter className="flex-col gap-2 text-sm">
-        <div className="flex items-center gap-2 leading-none font-medium">
+      <CardFooter className='flex-col gap-2 text-sm'>
+        <div className='flex items-center gap-2 leading-none font-medium'>
           {total} leads répartis par statut
-          <TrendingUp className="h-4 w-4" />
+          <TrendingUp className='h-4 w-4' />
         </div>
-        <div className="text-muted-foreground leading-none">
+        <div className='text-muted-foreground leading-none'>
           Statuts :{' '}
           {data
             .filter((d) => d.count > 0)
@@ -203,12 +205,35 @@ function normalizeAcquisitionSource(raw: unknown): string {
   if (!s) return SOURCE_LABEL_NONE;
   if (s.includes('facebook')) return 'Facebook';
   if (s.includes('whatsapp') || s.includes('whats app')) return 'WhatsApp';
-  if (s.includes('site web') || s === 'web' || s.includes('internet') || s.includes('site')) return 'Site web';
-  if (s.includes('bouche') || s.includes('recommandation') || s.includes('oreille')) return 'Bouche-à-oreille';
+  if (
+    s.includes('site web') ||
+    s === 'web' ||
+    s.includes('internet') ||
+    s.includes('site')
+  )
+    return 'Site web';
+  if (
+    s.includes('bouche') ||
+    s.includes('recommandation') ||
+    s.includes('oreille')
+  )
+    return 'Bouche-à-oreille';
   if (s.includes('email') || s.includes('mail')) return 'Email';
-  if (s.includes('partenaire') || s.includes('cabinet') || s.includes('recrutement') || s.includes('cooperative') || s.includes('banque')) return 'Partenaires';
+  if (
+    s.includes('partenaire') ||
+    s.includes('cabinet') ||
+    s.includes('recrutement') ||
+    s.includes('cooperative') ||
+    s.includes('banque')
+  )
+    return 'Partenaires';
   // Correspondance exacte (sans accent / casse) pour les libellés standard
-  const exact = ACQUISITION_SOURCES.find((l) => l !== SOURCE_LABEL_NONE && l !== SOURCE_LABEL_OTHER && l.toLowerCase() === s);
+  const exact = ACQUISITION_SOURCES.find(
+    (l) =>
+      l !== SOURCE_LABEL_NONE &&
+      l !== SOURCE_LABEL_OTHER &&
+      l.toLowerCase() === s,
+  );
   if (exact) return exact;
   return SOURCE_LABEL_OTHER;
 }
@@ -260,7 +285,11 @@ export function ChartPieDonutBySource() {
         })).filter((d) => d.count > 0);
 
         const sum = chartData.reduce((acc, d) => acc + d.count, 0);
-        setData(chartData.length > 0 ? chartData : defaultSourceData.filter((d) => d.source === SOURCE_LABEL_NONE));
+        setData(
+          chartData.length > 0
+            ? chartData
+            : defaultSourceData.filter((d) => d.source === SOURCE_LABEL_NONE),
+        );
         setTotal(sum);
       } catch {
         // en cas d'erreur on garde les données par défaut
@@ -269,21 +298,23 @@ export function ChartPieDonutBySource() {
   }, []);
 
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="items-center pb-0">
+    <Card className='flex flex-col'>
+      <CardHeader className='items-center pb-0'>
         <CardTitle>Répartition par source</CardTitle>
-        <CardDescription>Prospects selon leur source d&apos;acquisition</CardDescription>
+        <CardDescription>
+          Prospects selon leur source d&apos;acquisition
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 pb-0 flex flex-col gap-4 px-6 pt-2">
+      <CardContent className='flex-1 pb-0 flex flex-col gap-4 px-6 pt-2'>
         {/* Légende au-dessus du graphique (avec effectif par compartiment) */}
-        <div className="flex flex-wrap items-center justify-center gap-3 gap-y-1.5">
+        <div className='flex flex-wrap items-center justify-center gap-3 gap-y-1.5'>
           {data.map((d) => (
-            <div key={d.source} className="flex items-center gap-1.5">
+            <div key={d.source} className='flex items-center gap-1.5'>
               <span
-                className="w-3 h-3 rounded-sm shrink-0"
+                className='w-3 h-3 rounded-sm shrink-0'
                 style={{ backgroundColor: d.fill }}
               />
-              <span className="text-[11px] text-gray-700">
+              <span className='text-[11px] text-gray-700'>
                 {d.source} ({d.count})
               </span>
             </div>
@@ -291,7 +322,7 @@ export function ChartPieDonutBySource() {
         </div>
         <ChartContainer
           config={chartConfig}
-          className="mx-auto w-full min-h-[250px] h-[250px]"
+          className='mx-auto w-full min-h-[250px] h-[250px]'
         >
           <PieChart>
             <ChartTooltip
@@ -300,23 +331,23 @@ export function ChartPieDonutBySource() {
             />
             <Pie
               data={data}
-              dataKey="count"
-              nameKey="source"
+              dataKey='count'
+              nameKey='source'
               innerRadius={60}
               outerRadius={80}
-              paddingAngle={5}
-              stroke="white"
-              strokeWidth={1.5}
+              // paddingAngle={5}
+              // stroke='white'
+              // strokeWidth={1.5}
             />
           </PieChart>
         </ChartContainer>
       </CardContent>
-      <CardFooter className="flex-col gap-2 text-sm">
-        <div className="flex items-center gap-2 leading-none font-medium">
+      <CardFooter className='flex-col gap-2 text-sm'>
+        <div className='flex items-center gap-2 leading-none font-medium'>
           {total} prospect{total !== 1 ? 's' : ''} répartis par source
-          <TrendingUp className="h-4 w-4" />
+          <TrendingUp className='h-4 w-4' />
         </div>
-        <div className="text-muted-foreground leading-none text-center break-words max-h-12 overflow-y-auto">
+        <div className='text-muted-foreground leading-none text-center break-words max-h-12 overflow-y-auto'>
           {data.filter((d) => d.count > 0).length
             ? data
                 .filter((d) => d.count > 0)

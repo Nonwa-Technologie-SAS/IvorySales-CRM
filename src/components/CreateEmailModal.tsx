@@ -197,7 +197,7 @@ export default function CreateEmailModal({
                 className="rounded border-gray-600"
               />
               <span className="text-[11px] text-gray-400">
-                Créer une tâche de suivi
+                Enregistrer un rappel dans l&apos;agenda
               </span>
             </label>
 

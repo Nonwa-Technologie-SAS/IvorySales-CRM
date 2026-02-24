@@ -16,7 +16,12 @@ export async function GET(
     const { id } = await params;
     const client = await prisma.client.findUnique({
       where: { id },
-      include: { company: true },
+      include: {
+        company: true,
+        convertedBy: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
     });
     if (!client) {
       return NextResponse.json({ error: "Client introuvable" }, { status: 404 });
@@ -59,7 +64,12 @@ export async function PATCH(
           totalRevenue: body.totalRevenue,
         }),
       },
-      include: { company: true },
+      include: {
+        company: true,
+        convertedBy: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
     });
     return NextResponse.json(client);
   } catch (error) {

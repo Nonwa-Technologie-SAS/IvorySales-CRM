@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,6 +12,9 @@ export async function GET() {
     const clients = await prisma.client.findMany({
       include: {
         company: true,
+        convertedBy: {
+          select: { id: true, name: true, email: true, role: true },
+        },
       },
       orderBy: { name: "asc" },
     });
@@ -27,6 +31,14 @@ export async function GET() {
 // Convertit un lead en client à partir de son id
 export async function POST(req: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Non authentifié" },
+        { status: 401 },
+      );
+    }
+
     const json = await req.json();
     const { leadId } = convertLeadSchema.parse(json);
 
@@ -60,6 +72,8 @@ export async function POST(req: Request) {
           location: lead.location || undefined,
           notes: lead.notes || undefined,
           companyId: lead.companyId,
+          convertedById: user.id,
+          convertedAt: new Date(),
         },
       });
 

@@ -47,6 +47,14 @@ export interface Client {
   location?: string | null;
   notes?: string | null;
   company?: { id: string; name: string } | null;
+  convertedById?: string | null;
+  convertedAt?: string | null;
+  convertedBy?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  } | null;
 }
 
 function ClientsPageInner() {
@@ -214,6 +222,12 @@ function ClientsPageInner() {
                     <p className='text-[11px] text-gray-500 truncate'>
                       {client.contact ?? 'Aucun contact'}
                     </p>
+                    <p className='text-[11px] text-gray-500'>
+                      Converti par :{' '}
+                      <span className='text-gray-700'>
+                        {client.convertedBy?.name ?? '—'}
+                      </span>
+                    </p>
                     <div className='flex justify-between items-center text-[11px] text-gray-500 mt-1'>
                       <span>
                         Société :{' '}
@@ -244,6 +258,9 @@ function ClientsPageInner() {
                         Société
                       </TableHead>
                       <TableHead className='text-[11px] font-medium text-gray-600'>
+                        Converti par
+                      </TableHead>
+                      <TableHead className='text-[11px] font-medium text-gray-600'>
                         Contact
                       </TableHead>
                       <TableHead className='text-[11px] font-medium text-gray-600 text-right'>
@@ -262,6 +279,9 @@ function ClientsPageInner() {
                         </TableCell>
                         <TableCell className='py-2.5 text-[11px] text-gray-700'>
                           {client.company?.name ?? '—'}
+                        </TableCell>
+                        <TableCell className='py-2.5 text-[11px] text-gray-600'>
+                          {client.convertedBy?.name ?? '—'}
                         </TableCell>
                         <TableCell className='py-2.5 text-[11px] text-gray-600'>
                           {client.contact ?? 'Aucun contact'}

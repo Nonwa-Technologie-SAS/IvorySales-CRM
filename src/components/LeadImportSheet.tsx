@@ -217,6 +217,50 @@ export default function LeadImportSheet({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleDownloadTemplate = async () => {
+    setError(null);
+    try {
+      const XLSX = await import('xlsx');
+
+      const headerRow = [
+        "Domaine d'activités",
+        "Nom de l'entreprise",
+        'Contact',
+        'Situation géographique',
+        'Reçu par',
+        'Observation',
+        'Civilité',
+        'Email',
+        'Nom',
+        'Prenoms',
+      ];
+
+      const exampleRow = [
+        'Informatique / SaaS',
+        'Acme Corp',
+        '+225 01 23 45 67',
+        'Abidjan, Cocody',
+        'Jean Dupont',
+        'Client rencontré au salon X',
+        'M.',
+        'contact@acme.ci',
+        'Dupont',
+        'Jean',
+      ];
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headerRow, exampleRow]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+      XLSX.writeFile(wb, 'modele_import_leads.xlsx');
+    } catch (e) {
+      setError(
+        "Impossible de générer le modèle Excel. Veuillez réessayer plus tard.",
+      );
+      // eslint-disable-next-line no-console
+      console.error(e);
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -283,14 +327,16 @@ export default function LeadImportSheet({
         <SheetHeader>
           <SheetTitle>Importer des leads depuis un fichier Excel</SheetTitle>
           <SheetDescription>
-            Colonnes attendues : Domaine d&apos;activités, Nom de
-            l&apos;entreprise, Contact (téléphone), Situation Géographique, reçu
-            par, observation.
+            Vous pouvez d&apos;abord télécharger le modèle Excel, le remplir
+            avec vos prospects, puis l&apos;importer ici. Colonnes attendues :
+            Domaine d&apos;activités, Nom de l&apos;entreprise, Contact
+            (téléphone), Situation géographique, Reçu par, Observation,
+            Civilité, Email, Nom, Prenoms.
           </SheetDescription>
         </SheetHeader>
 
         <div className='flex flex-col gap-4 flex-1 min-h-0 overflow-hidden'>
-          <div>
+          <div className='flex flex-wrap items-center gap-2'>
             <input
               ref={fileInputRef}
               type='file'
@@ -298,6 +344,13 @@ export default function LeadImportSheet({
               onChange={handleFileChange}
               className='hidden'
             />
+            <button
+              type='button'
+              onClick={handleDownloadTemplate}
+              className='px-3 py-2 rounded-xl bg-white border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50'
+            >
+              Télécharger le modèle Excel
+            </button>
             <button
               type='button'
               onClick={() => fileInputRef.current?.click()}

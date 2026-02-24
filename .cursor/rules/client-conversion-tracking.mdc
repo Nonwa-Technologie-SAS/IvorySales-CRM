@@ -1,0 +1,31 @@
+---
+description: Traçabilité "converti par" pour les clients (qui a converti le prospect en client)
+globs: "**/api/clients/**/*.ts","**/clients/**/*.tsx","**/schema.prisma"
+alwaysApply: false
+---
+
+# Traçabilité conversion prospect → client
+
+## Principe
+
+Chaque client issu d’une conversion (lead → client) doit enregistrer **qui** a effectué la conversion (commercial, manager ou admin). Tous les rôles (AGENT, MANAGER, ADMIN) peuvent convertir ; pas de restriction par rôle.
+
+## Schéma Prisma (Client)
+
+- `convertedById String?` — ID de l’utilisateur ayant converti (optionnel pour anciens clients).
+- `convertedAt DateTime?` — Date/heure de conversion.
+- Relation : `convertedBy User?` avec la relation inverse `clientsConverted Client[]` sur `User`.
+
+## API conversion (POST /api/clients)
+
+- Appeler `getCurrentUser()` en début de handler ; si non authentifié → **401**.
+- À la création du client dans la transaction : renseigner `convertedById: user.id` et `convertedAt: new Date()`.
+- Ne pas restreindre par rôle : tout utilisateur connecté peut convertir.
+
+## API lecture clients (GET)
+
+- Inclure `convertedBy: { select: { id: true, name: true, email: true, role: true } }` dans les `findMany` / `findUnique` pour exposer qui a converti.
+
+## Frontend
+
+- Liste et fiche client : afficher "Converti par : [nom]" (et optionnellement la date). Gérer `convertedBy === null` (ex. "—" ou "Non renseigné").

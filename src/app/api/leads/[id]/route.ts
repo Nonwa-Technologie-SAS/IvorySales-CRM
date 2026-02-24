@@ -14,6 +14,7 @@ export async function GET(
         company: true,
         activities: {
           orderBy: { date: "desc" },
+          take: 20,
           include: { user: { select: { name: true } } },
         },
         products: {
@@ -29,7 +30,15 @@ export async function GET(
       return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
     }
 
-    return NextResponse.json(lead);
+    const totalActivities = await prisma.activity.count({
+      where: { leadId: id },
+    });
+
+    return NextResponse.json({
+      ...lead,
+      activitiesTotal: totalActivities,
+      hasMoreActivities: totalActivities > lead.activities.length,
+    });
   } catch (error) {
     console.error("GET /api/leads/[id] error", error);
     return NextResponse.json(

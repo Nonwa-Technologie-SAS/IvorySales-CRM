@@ -1,0 +1,61 @@
+---
+description: Règles de rôles et permissions (ADMIN, MANAGER, AGENT) pour le CRM
+alwaysApply: true
+---
+
+# Rôles et permissions – CRM
+
+## Rôles métier
+
+- **ADMIN (admin)**
+  - Accès complet à tous les modules.
+  - Peut créer, modifier et supprimer des utilisateurs.
+  - Peut modifier les rôles et les paramètres de l’entreprise.
+
+- **MANAGER (manager)**
+  - Accès à la vision d’équipe (deals, activités, rapports d’équipe).
+  - Peut gérer les commerciaux (AGENT) de son équipe si la logique métier le permet.
+  - Ne doit pas pouvoir modifier/supprimer un ADMIN ni gérer le plan global.
+
+- **AGENT (commercial / agent)**
+  - Voit et gère principalement **ses/son** prospects, clients, deals, agenda, activités, uploader les pièces jointe de ces prospects et profil.
+  - N’a pas accès à la gestion des utilisateurs ni aux paramètres globaux.
+
+## Bonnes pratiques backend
+
+- **Toujours vérifier l’authentification et le rôle côté API** avant d’exécuter une action sensible :
+  - Lecture globale d’utilisateurs, modification de rôles, suppression d’utilisateurs.
+  - Actions impactant l’entreprise (plan, paramètres globaux).
+- Utiliser un helper du type `getCurrentUser()` + `hasRole()` pour centraliser la logique.
+- Retourner **403** (`Accès refusé`) si l’utilisateur n’a pas le rôle nécessaire, même s’il est connecté.
+
+### Exemples d’autorisations (intention métier)
+
+- **/api/users**
+  - `GET` : réservé à `ADMIN` (et éventuellement `MANAGER` si tu veux qu’il voie la liste).
+  - `POST`, `PATCH`, `DELETE` : réservé à `ADMIN` uniquement.
+
+- **/api/companies** (paramétrage entreprise, plan)
+  - Toutes les opérations critiques (changement de plan, suppression, config globale) : `ADMIN` uniquement.
+
+- **Modules commerciaux (deals, contacts, emails)**
+  - `AGENT` : accès à ses propres données.
+  - `MANAGER` : accès aux données de son équipe.
+  - `ADMIN` : accès global.
+
+## Bonnes pratiques frontend
+
+- **Ne jamais se fier uniquement au front pour la sécurité** : le backend doit toujours filtrer/valider.
+- Utiliser un contexte d’auth (`AuthProvider` + `useAuth()`) pour exposer `user.role` (`admin | manager | agent`).
+- Cacher ou désactiver les boutons/actions qu’un rôle ne doit pas utiliser, par exemple :
+  - Bouton “Ajouter un utilisateur” visible seulement pour `admin`.
+  - Bouton “Supprimer l’utilisateur” visible seulement pour `admin`.
+- Optionnel : ajouter des gardes de route (layout/middleware) pour bloquer
+  l’accès complet à certaines pages (ex. page “Utilisateurs” interdite à `agent`).
+
+## Alignement des rôles entre back et front
+
+- **Backend / DB** : `ADMIN`, `MANAGER`, `AGENT`.
+- **Frontend** : `admin`, `manager`, `agent` (avec le label “Commercial” pour `agent`).
+- Toujours mapper correctement : ne pas introduire de rôles supplémentaires sans
+  les ajouter dans les schémas Zod et dans Prisma.

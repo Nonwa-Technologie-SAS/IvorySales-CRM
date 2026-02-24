@@ -27,6 +27,23 @@ export async function POST(req: Request) {
       );
     }
 
+    const userWithMfa = user as typeof user & { mfaEnabled?: boolean };
+
+    if (userWithMfa.mfaEnabled) {
+      const res = NextResponse.json(
+        { requiresMfa: true, message: 'Vérification MFA requise' },
+        { status: 200 },
+      );
+      res.cookies.set('mfa_pending', user.id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 5,
+      });
+      return res;
+    }
+
     const res = NextResponse.json({
       id: user.id,
       name: user.name,
@@ -35,13 +52,20 @@ export async function POST(req: Request) {
       company: { id: user.company.id, name: user.company.name },
     });
 
-    // Cookie de session pour la protection des routes par le middleware
     res.cookies.set('auth_session', user.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 jours
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    res.cookies.set('auth_role', user.role, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return res;

@@ -53,15 +53,6 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-body {
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Inter',
-    sans-serif;
-}
-
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

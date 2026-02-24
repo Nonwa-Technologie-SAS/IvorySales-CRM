@@ -1,0 +1,39 @@
+---
+description: Objectifs commerciaux par période (Mois, Trimestre, Semestre, Annuelle) définis par manager/admin
+globs: "**/api/goals/**/*.ts","**/goals/**/*.tsx","**/schema.prisma","**/users/page.tsx","**/stats/page.tsx"
+alwaysApply: false
+---
+
+# Objectifs par commercial
+
+## Principe
+
+- Seuls **MANAGER** et **ADMIN** peuvent créer, modifier ou supprimer des objectifs.
+- Les objectifs sont définis **par commercial (AGENT)** selon la période : **Mois**, **Trimestre**, **Semestre**, **Annuelle**.
+- Un objectif par (userId, periodType, periodStart). Indicateurs : objectif conversions + objectif CA.
+
+## Périodes (GoalPeriodType)
+
+| Type     | Exemple      | periodStart / periodEnd |
+| -------- | ------------ | ----------------------- |
+| MONTH    | Février 2025 | 2025-02-01 → 2025-02-28 |
+| QUARTER  | T1 2025      | 2025-01-01 → 2025-03-31 |
+| SEMESTER | S1 2025      | 2025-01-01 → 2025-06-30 |
+| YEAR     | 2025         | 2025-01-01 → 2025-12-31 |
+
+## Schéma Prisma (SalesGoal)
+
+- `userId` (commercial), `companyId`, `periodType` (enum), `periodStart`, `periodEnd`.
+- `targetConversions`, `targetRevenue`. Optionnel : `setById` / `setBy` pour traçabilité.
+- Contrainte : `@@unique([userId, periodType, periodStart])`.
+
+## API
+
+- **POST /api/goals** : requireRole(['ADMIN','MANAGER']). Body : userId, periodType, year, month?|quarter?|semester?. Calculer periodStart/periodEnd côté serveur selon le type ; upsert.
+- **GET /api/goals** : ADMIN/MANAGER voient tous les objectifs (filtrés companyId) ; AGENT uniquement les siens (userId = currentUser.id). Exposer réalisé (conversions + CA entre periodStart et periodEnd).
+- **PATCH/DELETE /api/goals/[id]** : réservés ADMIN/MANAGER.
+
+## Frontend
+
+- Formulaire "Définir objectif" : choix Mois / Trimestre / Semestre / Annuelle puis année + mois/trimestre/semestre selon le cas ; champs objectif conversions et objectif CA.
+- Liste/suivi : afficher la période en clair (ex. "Fév. 2025", "T1 2025", "S1 2025", "2025") et réalisé vs objectif.

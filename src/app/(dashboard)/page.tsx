@@ -1,5 +1,6 @@
 'use client';
 
+import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
 import NeumoCard from '@/components/NeumoCard';
 import Sidebar from '@/components/Sidebar';
@@ -17,8 +18,24 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Lead } from '@prisma/client';
+import { RefreshCw, Target } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+
+/** Objectif avec réalisé (réponse GET /api/goals) */
+interface GoalWithRealized {
+  id: string;
+  periodType: string;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  targetConversions: number;
+  targetRevenue: number;
+  realizedConversions: number;
+  realizedRevenue: number;
+  user: { id: string; name: string; email: string };
+}
 
 interface LeadStats {
   total: number;
@@ -42,15 +59,58 @@ interface RecentLead {
   createdAt?: string;
 }
 
+/** Événement émis après une conversion lead→client pour rafraîchir les objectifs */
+export const GOALS_INVALIDATE_EVENT = 'crm:goals-invalidate';
+
 export default function DashboardPage() {
+  const pathname = usePathname();
+  const { user: authUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [leadStats, setLeadStats] = useState<LeadStats>(initialLeadStats);
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
+  const [goals, setGoals] = useState<GoalWithRealized[]>([]);
+  const [goalsLoading, setGoalsLoading] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => setLoading(false), 800);
     return () => clearTimeout(timeout);
   }, []);
+
+  // Rafraîchir les objectifs (réalisé + barres) : fetch sans cache, à chaque retour sur l’onglet, ou via le bouton Actualiser
+  const fetchGoals = useCallback(async () => {
+    setGoalsLoading(true);
+    try {
+      const res = await fetch('/api/goals', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setGoals(data);
+    } catch {
+      // silencieux
+    } finally {
+      setGoalsLoading(false);
+    }
+  }, []);
+
+  // Rafraîchir les objectifs : au montage, quand on revient sur l’onglet, quand on navigue vers le dashboard, ou après une conversion (événement)
+  useEffect(() => {
+    if (authUser?.role !== 'agent') return;
+    void fetchGoals();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void fetchGoals();
+    };
+    const onGoalsInvalidate = () => void fetchGoals();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener(GOALS_INVALIDATE_EVENT, onGoalsInvalidate);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(GOALS_INVALIDATE_EVENT, onGoalsInvalidate);
+    };
+  }, [authUser?.role, fetchGoals]);
+
+  // À chaque affichage de la page d’accueil (ex. après conversion puis clic sur Accueil), recharger les objectifs
+  useEffect(() => {
+    if (authUser?.role === 'agent' && pathname === '/') void fetchGoals();
+  }, [authUser?.role, pathname, fetchGoals]);
 
   // Récupération des leads pour alimenter les stats globales + les 10 derniers
   useEffect(() => {
@@ -170,6 +230,114 @@ export default function DashboardPage() {
                 </NeumoCard>
               </div>
             </section>
+
+            {/* Mon objectif du mois (AGENT uniquement) */}
+            {authUser?.role === 'agent' && (
+              <section className='mt-4 w-full'>
+                {(() => {
+                  const now = new Date();
+                  const currentGoal = goals.find((g) => {
+                    const start = new Date(g.periodStart);
+                    const end = new Date(g.periodEnd);
+                    return now >= start && now <= end;
+                  }) ?? goals[0];
+                  if (!currentGoal) {
+                    return (
+                      <NeumoCard className='p-4 bg-white/80 flex flex-col gap-2'>
+                        <span className='text-[11px] text-gray-500 flex items-center gap-1'>
+                          <Target className='w-3.5 h-3.5' />
+                          Mon objectif
+                        </span>
+                        <p className='text-xs text-gray-500'>
+                          Aucun objectif défini pour cette période. Votre manager peut en définir un depuis la page Utilisateurs.
+                        </p>
+                      </NeumoCard>
+                    );
+                  }
+                  const convPct =
+                    currentGoal.targetConversions > 0
+                      ? Math.min(
+                          100,
+                          (currentGoal.realizedConversions / currentGoal.targetConversions) * 100,
+                        )
+                      : 0;
+                  const revenuePct =
+                    currentGoal.targetRevenue > 0
+                      ? Math.min(
+                          100,
+                          (currentGoal.realizedRevenue / currentGoal.targetRevenue) * 100,
+                        )
+                      : 0;
+                  const convDone =
+                    currentGoal.realizedConversions >= currentGoal.targetConversions;
+                  const revenueDone =
+                    currentGoal.realizedRevenue >= currentGoal.targetRevenue;
+                  return (
+                    <NeumoCard className='p-4 md:p-5 bg-[#f5f5ff] border-2 border-primary/20 flex flex-col gap-4'>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-xs font-semibold text-primary flex items-center gap-1'>
+                          <Target className='w-4 h-4' />
+                          Mon objectif ({currentGoal.periodLabel})
+                        </span>
+                        <button
+                          type='button'
+                          onClick={() => void fetchGoals()}
+                          disabled={goalsLoading}
+                          className='p-1.5 rounded-full text-gray-500 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50'
+                          title='Actualiser les réalisations'
+                        >
+                          <RefreshCw
+                            className={`w-4 h-4 ${goalsLoading ? 'animate-spin' : ''}`}
+                          />
+                        </button>
+                      </div>
+                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                        <div className='flex flex-col gap-2'>
+                          <div className='flex justify-between text-[11px]'>
+                            <span className='text-gray-500'>Conversions</span>
+                            <span className='font-medium text-primary'>
+                              {currentGoal.realizedConversions} / {currentGoal.targetConversions}
+                              {convDone && <span className='text-emerald-600 ml-1'>✓</span>}
+                            </span>
+                          </div>
+                          <div className='h-2 rounded-full bg-gray-200 overflow-hidden'>
+                            <div
+                              className='h-full rounded-full bg-primary transition-all'
+                              style={{ width: `${convPct}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className='flex flex-col gap-2'>
+                          <div className='flex justify-between text-[11px]'>
+                            <span className='text-gray-500'>CA</span>
+                            <span className='font-medium text-primary'>
+                              {currentGoal.realizedRevenue.toLocaleString('fr-FR', {
+                                style: 'currency',
+                                currency: 'XOF',
+                                maximumFractionDigits: 0,
+                              })}{' '}
+                              /{' '}
+                              {currentGoal.targetRevenue.toLocaleString('fr-FR', {
+                                style: 'currency',
+                                currency: 'XOF',
+                                maximumFractionDigits: 0,
+                              })}
+                              {revenueDone && <span className='text-emerald-600 ml-1'>✓</span>}
+                            </span>
+                          </div>
+                          <div className='h-2 rounded-full bg-gray-200 overflow-hidden'>
+                            <div
+                              className='h-full rounded-full bg-primary transition-all'
+                              style={{ width: `${revenuePct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </NeumoCard>
+                  );
+                })()}
+              </section>
+            )}
 
             {/* Bloc central : deux colonnes (donut source + donut statut) */}
             <section className='mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full'>

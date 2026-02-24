@@ -1,5 +1,14 @@
+import { AuthProvider } from '@/contexts/AuthContext';
 import type { Metadata, Viewport } from 'next';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-sans',
+});
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -12,18 +21,18 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   ),
   title: {
-    default: 'CRM Neumorphism Dashboard',
-    template: '%s | CRM',
+    default: 'IvoireLead CRM',
+    template: '%s | IvoireLead CRM',
   },
   description:
-    'CRM commercial fullstack avec Next.js et design premium. Gérez vos leads, produits, services et clients.',
+    'IvoireLead CRM : CRM commercial fullstack moderne pour suivre vos leads, objectifs et ventes.',
   keywords: ['CRM', 'prospects', 'leads', 'ventes', 'Next.js', 'dashboard'],
-  authors: [{ name: 'CRM' }],
-  creator: 'CRM',
+  authors: [{ name: 'IvoireLead CRM' }],
+  creator: 'IvoireLead CRM',
   openGraph: {
     type: 'website',
     locale: 'fr_FR',
-    siteName: 'CRM Neumorphism',
+    siteName: 'IvoireLead CRM',
   },
   robots: {
     index: true,
@@ -37,10 +46,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang='fr'>
-      <body className='min-h-screen bg-bgGray text-primary'>
-        {/* <Navbar /> */}
-        <div className='md:pt-0'>{children}</div>
+    <html lang='fr' className={plusJakarta.variable}>
+      <body
+        className={`${plusJakarta.className} min-h-screen bg-bgGray text-primary`}
+      >
+        <AuthProvider>
+          {/* <Navbar /> */}
+          <div className='md:pt-0'>{children}</div>
+        </AuthProvider>
       </body>
     </html>
   );

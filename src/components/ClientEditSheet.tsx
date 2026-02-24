@@ -17,6 +17,14 @@ export interface ClientForSheet {
   location?: string | null;
   notes?: string | null;
   company?: { id: string; name: string } | null;
+  convertedById?: string | null;
+  convertedAt?: string | null;
+  convertedBy?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  } | null;
 }
 
 type InterestKind = "product" | "service";

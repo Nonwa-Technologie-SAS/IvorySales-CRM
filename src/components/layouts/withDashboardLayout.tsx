@@ -1,7 +1,8 @@
 'use client';
 
+import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
-import Sidebar, { sidebarItems } from '@/components/Sidebar';
+import Sidebar, { getSidebarItemsForRole } from '@/components/Sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ComponentType, PropsWithChildren } from 'react';
 
@@ -9,6 +10,8 @@ export function withDashboardLayout<P>(PageComponent: ComponentType<P>) {
   const Wrapped = (props: PropsWithChildren<P>) => {
     const pathname = usePathname();
     const router = useRouter();
+    const { user } = useAuth();
+    const sidebarItems = getSidebarItemsForRole(user?.role ?? null);
 
     const handleNavigate = (href: string) => {
       if (href && href !== pathname) {
@@ -21,7 +24,7 @@ export function withDashboardLayout<P>(PageComponent: ComponentType<P>) {
         {/* Sidebar desktop */}
         <Sidebar />
 
-        <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full'>
+        <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full h-screen overflow-y-auto'>
           <Navbar />
 
           {/* Menu mobile horizontal (visible uniquement sur téléphone) */}

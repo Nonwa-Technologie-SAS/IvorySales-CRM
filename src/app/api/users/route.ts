@@ -1,3 +1,4 @@
+import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -18,7 +19,10 @@ const updateUserSchema = z.object({
   role: z.enum(['ADMIN', 'MANAGER', 'AGENT']).optional(),
 });
 
+/** GET : liste des utilisateurs — réservé à ADMIN et MANAGER (AGENT n'a pas accès). */
 export async function GET() {
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
+  if (auth instanceof Response) return auth;
   try {
     const users = await prisma.user.findMany({
       include: { company: true },
@@ -34,7 +38,10 @@ export async function GET() {
   }
 }
 
+/** PATCH : modification d'un utilisateur (rôles, etc.) — ADMIN ou MANAGER. */
 export async function PATCH(req: Request) {
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
+  if (auth instanceof Response) return auth;
   try {
     const json = await req.json();
     const body = updateUserSchema.parse(json);
@@ -58,7 +65,10 @@ export async function PATCH(req: Request) {
   }
 }
 
+/** DELETE : suppression d'un utilisateur — ADMIN ou MANAGER. */
 export async function DELETE(req: Request) {
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
+  if (auth instanceof Response) return auth;
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
@@ -79,7 +89,10 @@ export async function DELETE(req: Request) {
   }
 }
 
+/** POST : création d'un utilisateur — ADMIN ou MANAGER. */
 export async function POST(req: Request) {
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
+  if (auth instanceof Response) return auth;
   try {
     const json = await req.json();
     const body = createUserSchema.parse(json);

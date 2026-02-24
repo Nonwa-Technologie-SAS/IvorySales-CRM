@@ -14,12 +14,15 @@ model Company {
   plan      String   @default("free")
   createdAt DateTime @default(now())
 
-  users    User[]
-  leads    Lead[]
-  deals    Deal[]
-  clients  Client[]
-  products Product[]
-  services Service[]
+  users      User[]
+  leads      Lead[]
+  deals      Deal[]
+  clients    Client[]
+  products   Product[]
+  services   Service[]
+  salesGoals SalesGoal[]
+  /// Ventes réalisées pour cette société
+  sales      Sale[]
 }
 
 model Product {
@@ -31,6 +34,8 @@ model Product {
   leads     Lead[]   @relation("LeadProducts")
   /// Intérêts exprimés par les clients pour ce produit, avec valeur estimative
   clientInterests ClientProductInterest[]
+  /// Lignes de vente associées à ce produit
+  saleItems       SaleItem[]
 }
 
 model Service {
@@ -42,6 +47,8 @@ model Service {
   leads     Lead[]   @relation("LeadServices")
   /// Intérêts exprimés par les clients pour ce service, avec valeur estimative
   clientInterests ClientServiceInterest[]
+  /// Lignes de vente associées à ce service
+  saleItems       SaleItem[]
 }
 
 model User {
@@ -52,10 +59,21 @@ model User {
   role      Role     @default(AGENT)
   company   Company  @relation(fields: [companyId], references: [id])
   companyId String
+  /// Activation de la double authentification (MFA)
+  mfaEnabled Boolean @default(false)
+  /// Secret TOTP (base32) pour génération des codes OTP ; présent si MFA configuré ou en attente de vérification
+  mfaSecret  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  activities Activity[]
+  activities       Activity[]
+  clientsConverted Client[]
+  /// Objectifs commerciaux assignés à cet utilisateur
+  salesGoals       SalesGoal[]
+  /// Objectifs que cet utilisateur a définis (manager/admin)
+  goalsSetBy       SalesGoal[] @relation("SalesGoalSetBy")
+  /// Ventes réalisées par ce commercial
+  sales            Sale[]
 }
 
 model Lead {
@@ -88,6 +106,8 @@ model Lead {
   services   Service[] @relation("LeadServices")
   /// Pièces jointes (fichiers) associées au prospect
   attachments LeadAttachment[]
+  /// Événements / tâches de prospection enregistrés dans l'agenda
+  agendaItems AgendaItem[]
 }
 
 /// Pièce jointe d'un prospect (fichier uploadé)
@@ -138,12 +158,19 @@ model Client {
   location       String?
   /// Notes sur le client (observations)
   notes          String?
-  /// Chiffre d'affaires total généré par ce client
+  /// Chiffre d'affaires total généré par ce client (somme des ventes)
   totalRevenue Float  @default(0)
 
   company   Company  @relation(fields: [companyId], references: [id])
   companyId String
 
+  /// Ventes réalisées pour ce client
+  sales     Sale[]
+
+  /// Utilisateur ayant converti le prospect en client
+  convertedById String?
+  convertedAt   DateTime?
+  convertedBy   User?   @relation(fields: [convertedById], references: [id])
   /// Produits pour lesquels le client est intéressé, avec valeur estimative
   productInterests ClientProductInterest[]
   /// Services pour lesquels le client est intéressé, avec valeur estimative
@@ -178,6 +205,38 @@ model ClientServiceInterest {
   @@unique([clientId, serviceId])
 }
 
+/// Vente (commande) réalisée pour un client, par un commercial, pour une société
+model Sale {
+  id        String   @id @default(cuid())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId String
+  /// Date effective de la vente
+  date      DateTime
+  /// Montant total de la vente (somme des lignes)
+  amount    Float
+  createdAt DateTime @default(now())
+
+  items     SaleItem[]
+}
+
+/// Détail de ligne d'une vente (produit ou service vendu)
+model SaleItem {
+  id        String   @id @default(cuid())
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId    String
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?
+  service   Service? @relation(fields: [serviceId], references: [id])
+  serviceId String?
+  quantity  Int
+  unitPrice Float
+  lineTotal Float
+}
+
 model Activity {
   id        String   @id @default(cuid())
   type      ActivityType
@@ -210,4 +269,52 @@ enum ActivityType {
   WHATSAPP
   MEETING
   NOTE
+}
+
+/// Statut d'une tâche / événement dans l'agenda du prospect
+enum AgendaStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+/// Type de période pour les objectifs commerciaux
+enum GoalPeriodType {
+  MONTH
+  QUARTER
+  SEMESTER
+  YEAR
+}
+
+/// Objectif commercial par commercial et par période (Mois, Trimestre, Semestre, Année)
+model SalesGoal {
+  id                 String         @id @default(cuid())
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+  company            Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId          String
+  periodType         GoalPeriodType
+  periodStart        DateTime
+  periodEnd          DateTime
+  targetConversions  Int            @default(0)
+  targetRevenue      Float          @default(0)
+  /// Utilisateur (manager/admin) ayant défini cet objectif
+  setById            String?
+  setBy              User?          @relation("SalesGoalSetBy", fields: [setById], references: [id], onDelete: SetNull)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@unique([userId, periodType, periodStart])
+}
+
+/// Événement de l'agenda : action à mener sur un prospect (prospection → conversion)
+model AgendaItem {
+  id          String       @id @default(cuid())
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId      String
+  title       String
+  description String?
+  dueDate     DateTime
+  status      AgendaStatus @default(TODO)
+  createdAt   DateTime     @default(now())
 }

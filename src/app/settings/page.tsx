@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Briefcase,
   Building2,
@@ -10,13 +11,12 @@ import {
   MapPin,
   Pencil,
   Phone,
-  Rocket,
-  Users,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
 
-type SettingsTab = "organization" | "users" | "integration" | "compliance";
+type SettingsTab = "organization" | "legal";
 
 interface CurrentOrg {
   companyName: string;
@@ -26,8 +26,19 @@ interface CurrentOrg {
 }
 
 function SettingsPageInner() {
+  const router = useRouter();
+  const { user: authUser, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<SettingsTab>("organization");
   const [org, setOrg] = useState<CurrentOrg | null>(null);
+
+  // Garde : Paramètres globaux et utilisateurs réservés à ADMIN/MANAGER (AGENT redirigé)
+  useEffect(() => {
+    if (loading) return;
+    if (!authUser || authUser.role === "agent") {
+      router.replace("/");
+      return;
+    }
+  }, [authUser, loading, router]);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -47,12 +58,27 @@ function SettingsPageInner() {
       .catch(() => setOrg(null));
   }, []);
 
-  const tabs: { key: SettingsTab; label: string; icon: typeof Briefcase }[] = [
+  const tabs: { key: SettingsTab; label: string; icon: typeof Briefcase; adminOnly?: boolean }[] = [
     { key: "organization", label: "Organisation", icon: Briefcase },
-    { key: "users", label: "Utilisateurs & permissions", icon: Users },
-    { key: "integration", label: "Intégrations", icon: Rocket },
-    { key: "compliance", label: "Conformité", icon: FileText },
+    {
+      key: "legal",
+      label: "Données & CGV / FAQ",
+      icon: FileText,
+      adminOnly: true,
+    },
   ];
+  const visibleTabs =
+    authUser && (authUser.role === "admin" || authUser.role === "manager")
+      ? tabs
+      : tabs.filter((t) => !t.adminOnly);
+
+  if (loading || !authUser || authUser.role === "agent") {
+    return (
+      <div className="flex items-center justify-center min-h-[200px] text-gray-500 text-sm">
+        Chargement…
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,7 +92,7 @@ function SettingsPageInner() {
 
       {/* Onglets */}
       <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-gray-100 border border-gray-100">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
           return (
@@ -208,34 +234,38 @@ function SettingsPageInner() {
         </>
       )}
 
-      {activeTab === "users" && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-neu-soft">
-          <h2 className="text-base font-semibold text-primary mb-2">
-            Utilisateurs & permissions
-          </h2>
-          <p className="text-sm text-gray-500">
-            Gestion des utilisateurs et des rôles à venir.
-          </p>
+      {activeTab === "legal" && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-neu-soft space-y-6">
+          <section>
+            <h2 className="text-base font-semibold text-primary mb-1">
+              Politique de protection des données
+            </h2>
+            <p className="text-sm text-gray-500">
+              Décrivez ici comment les données des prospects, clients et utilisateurs
+              sont collectées, stockées et protégées, conformément aux lois en vigueur
+              en Côte d&apos;Ivoire.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-semibold text-primary mb-1">FAQ</h2>
+            <p className="text-sm text-gray-500">
+              Regroupez les questions fréquentes de vos commerciaux et managers
+              (ex. import de leads, objectifs, agenda, etc.).
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-base font-semibold text-primary mb-1">
+              Conditions Générales de Vente (CGV)
+            </h2>
+            <p className="text-sm text-gray-500">
+              Ajoutez ou liez ici vos CGV applicables aux prestations gérées via le CRM.
+            </p>
+          </section>
         </div>
       )}
 
-      {activeTab === "integration" && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-neu-soft">
-          <h2 className="text-base font-semibold text-primary mb-2">Intégrations</h2>
-          <p className="text-sm text-gray-500">
-            Connectez vos outils (email, calendrier, etc.) à venir.
-          </p>
-        </div>
-      )}
-
-      {activeTab === "compliance" && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-neu-soft">
-          <h2 className="text-base font-semibold text-primary mb-2">Conformité</h2>
-          <p className="text-sm text-gray-500">
-            Documents et paramètres de conformité à venir.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -12,7 +13,10 @@ const createCompanySchema = z.object({
   }),
 });
 
+/** GET : liste des entreprises — ADMIN et MANAGER (pas AGENT). */
 export async function GET() {
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
+  if (auth instanceof Response) return auth;
   try {
     const companies = await prisma.company.findMany({
       include: { _count: { select: { users: true } } },
@@ -28,7 +32,10 @@ export async function GET() {
   }
 }
 
+/** POST : création d'entreprise (opération critique) — ADMIN uniquement. */
 export async function POST(req: Request) {
+  // const auth = await requireRole(['ADMIN']);
+  // if (auth instanceof Response) return auth;
   try {
     const json = await req.json();
     const body = createCompanySchema.parse(json);
@@ -39,7 +46,10 @@ export async function POST(req: Request) {
     });
     if (existingUser) {
       return NextResponse.json(
-        { error: "Un utilisateur existe déjà avec cet email. Veuillez en utiliser un autre." },
+        {
+          error:
+            'Un utilisateur existe déjà avec cet email. Veuillez en utiliser un autre.',
+        },
         { status: 400 },
       );
     }

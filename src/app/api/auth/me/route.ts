@@ -30,11 +30,14 @@ export async function GET() {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
     }
 
+    const u = user as { mfaEnabled?: boolean; mfaSecret?: string | null };
     return NextResponse.json({
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
+      mfaEnabled: u.mfaEnabled ?? false,
+      mfaSetupPending: !!u.mfaSecret && !u.mfaEnabled,
       company: user.company,
     });
   } catch (error) {
