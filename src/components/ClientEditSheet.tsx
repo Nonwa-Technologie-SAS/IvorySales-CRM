@@ -229,7 +229,8 @@ export default function ClientEditSheet({
     0,
   );
 
-  const estimatedCommission = totalEstimated * 0.1;
+  const COMMISSION_RATE = 0.03;
+  const estimatedCommission = totalEstimated * COMMISSION_RATE;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/20 backdrop-blur-sm">
@@ -390,7 +391,7 @@ export default function ClientEditSheet({
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Commission commerciale (10 %)</span>
+                      <span>Commission commerciale (3 %)</span>
                       <span className="font-semibold text-primary">
                         {estimatedCommission.toLocaleString("fr-FR", {
                           style: "currency",

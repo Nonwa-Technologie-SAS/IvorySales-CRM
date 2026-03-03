@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, Search, Settings, User } from 'lucide-react';
+import { BookOpen, LogOut, Search, Settings, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -79,6 +79,10 @@ export default function Navbar() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end' className='min-w-[160px]'>
+              <DropdownMenuItem onClick={() => router.push('/guide')}>
+                <BookOpen className='w-4 h-4 mr-2' />
+                Guide d&apos;utilisation
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push('/profile')}>
                 <User className='w-4 h-4 mr-2' />
                 Profil

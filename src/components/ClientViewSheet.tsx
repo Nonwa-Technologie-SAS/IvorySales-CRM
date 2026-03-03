@@ -96,8 +96,9 @@ export default function ClientViewSheet({
   );
 
   const totalEstimated = totalProducts + totalServices;
-  const estimatedCommission = totalEstimated * 0.1;
-  const realizedCommission = client.totalRevenue * 0.1;
+  const COMMISSION_RATE = 0.03;
+  const estimatedCommission = totalEstimated * COMMISSION_RATE;
+  const realizedCommission = client.totalRevenue * COMMISSION_RATE;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/20 backdrop-blur-sm">
@@ -276,7 +277,7 @@ export default function ClientViewSheet({
                 </div>
                 <div className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-primary/5">
                   <span className="text-gray-600">
-                    Commission commerciale (10 %)
+                    Commission commerciale (3 %)
                   </span>
                   <span className="text-primary font-bold">
                     {realizedCommission.toLocaleString("fr-FR", {
@@ -403,7 +404,7 @@ export default function ClientViewSheet({
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">
-                        Commission commerciale estimée (10 %)
+                        Commission commerciale estimée (3 %)
                       </span>
                       <span className="font-semibold text-primary">
                         {estimatedCommission.toLocaleString("fr-FR", {

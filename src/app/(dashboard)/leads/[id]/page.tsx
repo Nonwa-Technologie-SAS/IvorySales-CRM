@@ -84,7 +84,7 @@ interface LeadDetail {
   activities: Activity[];
   products?: { id: string; name: string }[];
   services?: { id: string; name: string }[];
-  activitiesTotal?: number;
+  totalActivities?: number;
   hasMoreActivities?: boolean;
 }
 
@@ -104,6 +104,7 @@ export default function LeadDetailPage() {
     text: string;
   } | null>(null);
   const [converting, setConverting] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -118,9 +119,9 @@ export default function LeadDetailPage() {
     return (
       <div className="min-h-screen flex bg-bgGray">
         <Sidebar />
-        <main className="flex-1 flex flex-col min-w-0 overflow-auto">
+        <main className="flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full">
           <Navbar />
-          <div className="flex-1 flex flex-col gap-4 p-4 md:p-6">
+          <div className="flex-1 flex flex-col gap-4 mt-2">
             {/* Skeleton : bandeau Détails du lead + cycle de vie */}
             <NeumoCard className="p-4">
               <div className="flex flex-col gap-3">
@@ -234,9 +235,9 @@ export default function LeadDetailPage() {
     return (
       <div className="min-h-screen flex bg-bgGray">
         <Sidebar />
-        <main className="flex-1 flex flex-col min-w-0">
+        <main className="flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full">
           <Navbar />
-          <div className="p-4 md:p-6 flex-1 flex flex-col items-center justify-center gap-4">
+          <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <p className="text-sm text-gray-500">Lead introuvable.</p>
             <Link
               href="/leads"
@@ -281,14 +282,87 @@ export default function LeadDetailPage() {
   const currentStageIndex = LIFECYCLE_STAGES.findIndex((s) => s.key === lead.status);
   const completedIndex = currentStageIndex >= 0 ? currentStageIndex : -1;
 
+  const currentTabConfig = ACTIVITY_TABS.find((t) => t.key === activeTab);
+  const currentFilterType = currentTabConfig?.filterType;
+
+  const activitiesForCurrentFilter =
+    currentFilterType && currentFilterType !== "ALL"
+      ? lead.activities.filter((a) => a.type === currentFilterType)
+      : lead.activities;
+
+  const handleLoadMoreActivities = async () => {
+    if (!lead) return;
+    // Onglet Agenda : pagination gérée par un autre composant
+    if (activeTab === "agenda") return;
+
+    const tabConfig = ACTIVITY_TABS.find((t) => t.key === activeTab);
+    const filterType = tabConfig?.filterType ?? "ALL";
+
+    const alreadyLoadedCount =
+      filterType && filterType !== "ALL"
+        ? lead.activities.filter((a) => a.type === filterType).length
+        : lead.activities.length;
+
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        skip: String(alreadyLoadedCount),
+        take: "20",
+      });
+      if (filterType && filterType !== "ALL") {
+        params.set("filterType", filterType);
+      }
+
+      const res = await fetch(
+        `/api/leads/${encodeURIComponent(lead.id)}/activities?${params.toString()}`
+      );
+      if (!res.ok) return;
+
+      const payload: {
+        activities: Activity[];
+        total: number;
+        hasMore: boolean;
+      } = await res.json();
+
+      setLead((prev) => {
+        if (!prev) return prev;
+        const existingIds = new Set(prev.activities.map((a) => a.id));
+        const merged = [...prev.activities];
+        for (const a of payload.activities) {
+          if (!existingIds.has(a.id)) {
+            merged.push(a);
+          }
+        }
+        merged.sort(
+          (a, b) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+
+        return {
+          ...prev,
+          activities: merged,
+          totalActivities:
+            typeof payload.total === "number"
+              ? payload.total
+              : prev.totalActivities,
+          hasMoreActivities:
+            typeof payload.hasMore === "boolean"
+              ? payload.hasMore
+              : prev.hasMoreActivities,
+        };
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex bg-bgGray">
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 overflow-auto">
+      <main className="flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full">
         <Navbar />
-        <div className="flex-1 flex flex-col gap-4 p-4 md:p-6">
-          {/* Section Détails du lead - Cycle de vie */}
-          <NeumoCard className="p-4">
+        {/* Section Détails du lead - Cycle de vie */}
+        <NeumoCard className="p-4 mt-2">
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-primary">Détails du lead</h2>
@@ -576,6 +650,7 @@ export default function LeadDetailPage() {
                 ) : (
                   <InteractionHistory
                     lead={leadAsLead}
+                    activities={lead.activities}
                     filterType={ACTIVITY_TABS.find((t) => t.key === activeTab)?.filterType}
                     title={activeTab === "calls" ? "Journal des appels" : undefined}
                     initialType={activeTab === "calls" ? "CALL" : undefined}
@@ -587,6 +662,18 @@ export default function LeadDetailPage() {
                   />
                 )}
               </div>
+              {activeTab !== "agenda" && lead.hasMoreActivities && (
+                <div className="mt-3 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={handleLoadMoreActivities}
+                    disabled={loadingMore}
+                    className="px-4 py-1.5 rounded-full text-[11px] bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200 disabled:opacity-60"
+                  >
+                    {loadingMore ? "Chargement..." : "Charger plus"}
+                  </button>
+                </div>
+              )}
             </NeumoCard>
           </div>
 
@@ -635,7 +722,6 @@ export default function LeadDetailPage() {
 
             <LeadAttachmentsBlock leadId={lead.id} />
           </div>
-        </div>
         </div>
       </main>
 

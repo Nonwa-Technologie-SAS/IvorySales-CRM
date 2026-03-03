@@ -11,7 +11,12 @@ export async function GET(
     const lead = await prisma.lead.findUnique({
       where: { id },
       include: {
-        company: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         activities: {
           orderBy: { date: "desc" },
           take: 20,
@@ -36,7 +41,7 @@ export async function GET(
 
     return NextResponse.json({
       ...lead,
-      activitiesTotal: totalActivities,
+      totalActivities,
       hasMoreActivities: totalActivities > lead.activities.length,
     });
   } catch (error) {

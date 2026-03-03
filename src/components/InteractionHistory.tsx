@@ -33,6 +33,8 @@ export interface Activity {
 
 interface InteractionHistoryProps {
   lead: Lead | null;
+  /** Liste d'activités contrôlée par le parent (ex: lead.activities). Si fournie, aucune requête GET /api/activities n'est faite. */
+  activities?: Activity[];
   onActivityAdded?: (activity: Activity) => void;
   /** Filtre optionnel : n'afficher que ce type (CALL, EMAIL, WHATSAPP, MEETING, NOTE) */
   filterType?: string;
@@ -42,8 +44,15 @@ interface InteractionHistoryProps {
   initialType?: string;
 }
 
-export default function InteractionHistory({ lead, onActivityAdded, filterType, title, initialType }: InteractionHistoryProps) {
-  const [activities, setActivities] = useState<Activity[]>([]);
+export default function InteractionHistory({
+  lead,
+  activities: activitiesProp,
+  onActivityAdded,
+  filterType,
+  title,
+  initialType,
+}: InteractionHistoryProps) {
+  const [activities, setActivities] = useState<Activity[]>(activitiesProp ?? []);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState<string>(initialType || "NOTE");
@@ -59,15 +68,24 @@ export default function InteractionHistory({ lead, onActivityAdded, filterType, 
     }
   }, [initialType]);
 
+  // Synchronise avec les activités fournies par le parent (mode contrôlé)
   useEffect(() => {
-    if (!lead?.id) return;
+    if (activitiesProp) {
+      setActivities(activitiesProp);
+      setLoading(false);
+    }
+  }, [activitiesProp]);
+
+  // Mode non contrôlé : fallback sur l'API historique /api/activities
+  useEffect(() => {
+    if (!lead?.id || activitiesProp) return;
     setLoading(true);
     fetch(`/api/activities?leadId=${encodeURIComponent(lead.id)}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setActivities(data))
       .catch(() => setActivities([]))
       .finally(() => setLoading(false));
-  }, [lead?.id]);
+  }, [lead?.id, activitiesProp]);
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
@@ -94,7 +112,10 @@ export default function InteractionHistory({ lead, onActivityAdded, filterType, 
         throw new Error(body.error || "Erreur lors de l'ajout");
       }
       const created = await res.json();
-      setActivities((prev) => [created, ...prev]);
+      // En mode contrôlé, on délègue la mise à jour au parent via le callback
+      if (!activitiesProp) {
+        setActivities((prev) => [created, ...prev]);
+      }
       onActivityAdded?.(created);
       setFormContent("");
       setCallDate("");

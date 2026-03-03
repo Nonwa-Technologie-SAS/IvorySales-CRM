@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, List, LayoutGrid, Columns3, MoreHorizontal, Eye, Pencil, Trash2, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Search,
+  Plus,
+  List,
+  LayoutGrid,
+  Columns3,
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  Trash2,
+  FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import NeumoCard from "@/components/NeumoCard";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import {
@@ -25,6 +38,22 @@ import LeadCard, { type Lead } from "@/components/LeadCard";
 import LeadEditSheet from "@/components/LeadEditSheet";
 import PipelineColumn from "@/components/PipelineColumn";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
+import { useAuth } from "@/contexts/AuthContext";
+
+type Filters = {
+  status: string[];
+  source: string;
+  assignedTo: string;
+  createdFrom: string;
+  createdTo: string;
+  staleDays?: number;
+};
+
+type SavedView = {
+  id: string;
+  name: string;
+  filters: Filters;
+};
 
 interface LeadRow {
   id: string;
@@ -61,8 +90,44 @@ const STATUS_STYLES: Record<string, string> = {
 
 type ViewMode = "liste" | "kanban" | "grid";
 
+const DEFAULT_FILTERS: Filters = {
+  status: [],
+  source: "",
+  assignedTo: "",
+  createdFrom: "",
+  createdTo: "",
+  staleDays: undefined,
+};
+
+function buildSystemViewFilters(id: string): Filters {
+  const today = new Date();
+  const toISO = (d: Date) => d.toISOString().slice(0, 10);
+
+  if (id === "system-follow-up") {
+    // Leads à relancer : actifs, sans activité récente (7 jours)
+    return {
+      ...DEFAULT_FILTERS,
+      status: ["NEW", "CONTACTED", "QUALIFIED"],
+      staleDays: 7,
+    };
+  }
+
+  if (id === "system-new-week") {
+    const from = new Date();
+    from.setDate(from.getDate() - 7);
+    return {
+      ...DEFAULT_FILTERS,
+      createdFrom: toISO(from),
+      createdTo: toISO(today),
+    };
+  }
+
+  return { ...DEFAULT_FILTERS };
+}
+
 function LeadsPageInner() {
   const router = useRouter();
+  const { user: authUser } = useAuth();
   const [query, setQuery] = useState("");
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -73,11 +138,75 @@ function LeadsPageInner() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const LEADS_PER_PAGE = 25;
+  const [exporting, setExporting] = useState(false);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [selectedViewId, setSelectedViewId] = useState<string>("system-all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [userOptions, setUserOptions] = useState<{ id: string; name: string; role: string }[]>([]);
 
-  const fetchLeads = async () => {
+  const isManagerOrAdmin =
+    authUser?.role === "admin" || authUser?.role === "manager";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("crm_leads_views");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setSavedViews(parsed);
+      }
+    } catch {
+      // silencieux
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isManagerOrAdmin) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/users");
+        if (!res.ok) return;
+        const data = await res.json();
+        setUserOptions(
+          data.map((u: any) => ({
+            id: u.id,
+            name: u.name,
+            role: u.role,
+          })),
+        );
+      } catch {
+        // silencieux
+      }
+    })();
+  }, [isManagerOrAdmin]);
+
+  const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/leads");
+      const params = new URLSearchParams();
+      if (filters.status.length) {
+        params.set("status", filters.status.join(","));
+      }
+      if (filters.source.trim()) {
+        params.set("source", filters.source.trim());
+      }
+      if (filters.assignedTo) {
+        params.set("assignedTo", filters.assignedTo);
+      }
+      if (filters.createdFrom) {
+        params.set("createdFrom", filters.createdFrom);
+      }
+      if (filters.createdTo) {
+        params.set("createdTo", filters.createdTo);
+      }
+      if (filters.staleDays && filters.staleDays > 0) {
+        params.set("staleDays", String(filters.staleDays));
+      }
+
+      const qs = params.toString();
+      const res = await fetch(`/api/leads${qs ? `?${qs}` : ""}`);
       if (!res.ok) return;
       const data = await res.json();
       const mapped: LeadRow[] = data.map((l: any) => ({
@@ -100,11 +229,11 @@ function LeadsPageInner() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    void fetchLeads();
+  }, [fetchLeads]);
 
   const filtered = useMemo(
     () =>
@@ -168,6 +297,77 @@ function LeadsPageInner() {
     setEditOpen(true);
   };
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const res = await fetch("/api/leads/export");
+      if (!res.ok) {
+        // eslint-disable-next-line no-console
+        console.error("Export leads échoué");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `leads-${dateStr}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Erreur lors de l'export des leads", error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleSelectView = (id: string) => {
+    setSelectedViewId(id);
+    if (id.startsWith("system-")) {
+      setFilters(buildSystemViewFilters(id));
+    } else {
+      const view = savedViews.find((v) => v.id === id);
+      if (view) {
+        setFilters(view.filters);
+      }
+    }
+  };
+
+  const handleSaveCurrentView = () => {
+    if (typeof window === "undefined") return;
+    const name = window.prompt("Nom de la vue");
+    if (!name) return;
+    const newView: SavedView = {
+      id: `custom-${Date.now()}`,
+      name,
+      filters,
+    };
+    const updated = [...savedViews, newView];
+    setSavedViews(updated);
+    setSelectedViewId(newView.id);
+    try {
+      window.localStorage.setItem("crm_leads_views", JSON.stringify(updated));
+    } catch {
+      // silencieux
+    }
+  };
+
+  const toggleStatusFilter = (status: string) => {
+    setSelectedViewId("");
+    setFilters((prev) => {
+      const exists = prev.status.includes(status);
+      return {
+        ...prev,
+        status: exists
+          ? prev.status.filter((s) => s !== status)
+          : [...prev.status, status],
+      };
+    });
+  };
+
   return (
     <>
       <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-2">
@@ -209,6 +409,15 @@ function LeadsPageInner() {
           >
             <FileSpreadsheet className="w-3.5 h-3.5" /> Importer Excel
           </button>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white border border-gray-200 text-gray-700 text-xs font-medium shadow-neu hover:bg-gray-50 disabled:opacity-60"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            {exporting ? "Export..." : "Exporter les leads"}
+          </button>
         </div>
       </section>
 
@@ -222,6 +431,152 @@ function LeadsPageInner() {
               placeholder="Rechercher par nom, email ou téléphone"
               className="bg-transparent outline-none flex-1 text-[11px] text-gray-700"
             />
+          </div>
+          <div className="flex items-center gap-2 text-[11px] justify-between md:justify-end">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">Vues</span>
+              <select
+                value={selectedViewId}
+                onChange={(e) => handleSelectView(e.target.value)}
+                className="h-8 rounded-full border border-gray-200 bg-white px-2.5 text-[11px] text-gray-700"
+              >
+                <option value="system-all">Tous les leads</option>
+                <option value="system-follow-up">Leads à relancer</option>
+                <option value="system-new-week">Nouveaux leads (7 derniers jours)</option>
+                {savedViews.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveCurrentView}
+              className="px-3 py-1.5 rounded-full bg-gray-100 border border-gray-200 text-[11px] text-gray-700 hover:bg-gray-50"
+            >
+              Enregistrer la vue
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters((prev) => !prev)}
+              className="md:hidden px-3 py-1.5 rounded-full bg-gray-100 border border-gray-200 text-[11px] text-gray-700"
+            >
+              {showFilters ? "Masquer les filtres" : "Afficher les filtres"}
+            </button>
+          </div>
+        </div>
+
+        <div
+          className={`mt-2 rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3 flex flex-col gap-3 ${
+            showFilters ? "block" : "hidden md:block"
+          }`}
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_ORDER.map((status) => {
+              const active = filters.status.includes(status);
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => toggleStatusFilter(status)}
+                  className={`px-2.5 py-1.5 rounded-full text-[11px] border transition-colors ${
+                    active
+                      ? "bg-primary text-white border-primary shadow-neu"
+                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  {STATUS_LABELS[status] ?? status}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-[11px]">
+            <div className="flex flex-col gap-1">
+              <span className="text-gray-500">Source</span>
+              <input
+                type="text"
+                value={filters.source}
+                onChange={(e) => {
+                  setSelectedViewId("");
+                  setFilters((prev) => ({ ...prev, source: e.target.value }));
+                }}
+                placeholder="Ex: Facebook, WhatsApp..."
+                className="h-8 rounded-full border border-gray-200 bg-white px-3 text-[11px] text-gray-700"
+              />
+            </div>
+            {isManagerOrAdmin && (
+              <div className="flex flex-col gap-1">
+                <span className="text-gray-500">Commercial</span>
+                <select
+                  value={filters.assignedTo}
+                  onChange={(e) => {
+                    setSelectedViewId("");
+                    setFilters((prev) => ({
+                      ...prev,
+                      assignedTo: e.target.value,
+                    }));
+                  }}
+                  className="h-8 rounded-full border border-gray-200 bg-white px-3 text-[11px] text-gray-700"
+                >
+                  <option value="">Tous</option>
+                  {userOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex flex-col gap-1">
+              <span className="text-gray-500">Date de création</span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={filters.createdFrom}
+                  onChange={(e) => {
+                    setSelectedViewId("");
+                    setFilters((prev) => ({
+                      ...prev,
+                      createdFrom: e.target.value,
+                    }));
+                  }}
+                  className="h-8 rounded-full border border-gray-200 bg-white px-2 text-[11px] text-gray-700 flex-1"
+                />
+                <span className="text-gray-400 text-[10px]">au</span>
+                <input
+                  type="date"
+                  value={filters.createdTo}
+                  onChange={(e) => {
+                    setSelectedViewId("");
+                    setFilters((prev) => ({
+                      ...prev,
+                      createdTo: e.target.value,
+                    }));
+                  }}
+                  className="h-8 rounded-full border border-gray-200 bg-white px-2 text-[11px] text-gray-700 flex-1"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-gray-500">Dernière activité &gt; X jours</span>
+              <input
+                type="number"
+                min={0}
+                value={filters.staleDays ?? ""}
+                onChange={(e) => {
+                  setSelectedViewId("");
+                  const val = e.target.value;
+                  const num = val ? Number.parseInt(val, 10) : NaN;
+                  setFilters((prev) => ({
+                    ...prev,
+                    staleDays: Number.isNaN(num) ? undefined : num,
+                  }));
+                }}
+                placeholder="Ex: 7"
+                className="h-8 rounded-full border border-gray-200 bg-white px-3 text-[11px] text-gray-700"
+              />
+            </div>
           </div>
         </div>
 

@@ -215,6 +215,13 @@ export default function LeadImportSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [importErrors, setImportErrors] = useState<
+    { row: number; message: string }[] | null
+  >(null);
+  const [importSummary, setImportSummary] = useState<{
+    created: number;
+    total: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadTemplate = async () => {
@@ -266,6 +273,8 @@ export default function LeadImportSheet({
     if (!file) return;
     setError(null);
     setUploadError(null);
+    setImportErrors(null);
+    setImportSummary(null);
     const ext = file.name.toLowerCase().slice(-5);
     if (!ext.includes('xlsx') && !ext.includes('xls')) {
       setError('Veuillez sélectionner un fichier Excel (.xlsx ou .xls).');
@@ -304,9 +313,23 @@ export default function LeadImportSheet({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Import impossible');
-      onImported?.(data.created ?? 0);
-      setRows([]);
-      onClose();
+      const created = Number(data.created ?? 0);
+      const total = Number(data.total ?? rows.length);
+      const errors: { row: number; message: string }[] = Array.isArray(
+        data.errors,
+      )
+        ? data.errors
+        : [];
+
+      onImported?.(created);
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+        setImportSummary({ created, total });
+      } else {
+        setRows([]);
+        handleClose();
+      }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Erreur d’import');
     } finally {
@@ -318,6 +341,8 @@ export default function LeadImportSheet({
     setRows([]);
     setError(null);
     setUploadError(null);
+    setImportErrors(null);
+    setImportSummary(null);
     onClose();
   };
 
@@ -363,6 +388,29 @@ export default function LeadImportSheet({
           {error && <p className='text-xs text-rose-600'>{error}</p>}
           {uploadError && (
             <p className='text-xs text-rose-600'>{uploadError}</p>
+          )}
+          {importSummary && importErrors && importErrors.length > 0 && (
+            <div className='rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800'>
+              <p className='font-semibold mb-1'>
+                Certaines lignes n&apos;ont pas été importées
+              </p>
+              <p className='mb-1'>
+                {importSummary.created} lead(s) créé(s) sur {importSummary.total}{' '}
+                ligne(s) du fichier.
+              </p>
+              <ul className='list-disc list-inside space-y-0.5'>
+                {importErrors.slice(0, 5).map((err, idx) => (
+                  <li key={`${err.row}-${idx}`}>
+                    Ligne {err.row} : {err.message}
+                  </li>
+                ))}
+              </ul>
+              {importErrors.length > 5 && (
+                <p className='mt-1 text-[10px] text-amber-700'>
+                  {importErrors.length - 5} autre(s) erreur(s) non affichée(s).
+                </p>
+              )}
+            </div>
           )}
 
           {rows.length > 0 && (

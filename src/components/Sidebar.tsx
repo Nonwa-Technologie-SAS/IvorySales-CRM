@@ -3,7 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import type { FrontendRole } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
-import { CalendarDays, LayoutGrid, Package, Settings, Users } from 'lucide-react';
+import { BarChart3, BookOpen, Building2, CalendarDays, LayoutGrid, Package, Settings, UserPlus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -19,9 +19,11 @@ type SidebarItemDef = {
 export const sidebarItems: SidebarItemDef[] = [
   { icon: LayoutGrid, label: 'Dashboard', href: '/' },
   { icon: CalendarDays, label: 'Agenda', href: '/agenda' },
-  { icon: Users, label: 'Leads', href: '/leads' },
+  { icon: UserPlus, label: 'Leads', href: '/leads' },
+  { icon: BarChart3, label: 'Statistiques', href: '/stats', allowedRoles: ['admin', 'manager'] },
   { icon: Package, label: 'Produits et services', href: '/products-services', allowedRoles: ['admin', 'manager'] },
-  { icon: Users, label: 'Clients', href: '/clients' },
+  { icon: Building2, label: 'Clients', href: '/clients' },
+  { icon: BookOpen, label: 'Guide', href: '/guide' },
   { icon: Users, label: 'Utilisateurs', href: '/users', allowedRoles: ['admin', 'manager'] },
   { icon: Settings, label: 'Paramètres', href: '/settings', allowedRoles: ['admin', 'manager'] },
 ];

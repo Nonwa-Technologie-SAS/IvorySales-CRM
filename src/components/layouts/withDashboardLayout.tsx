@@ -24,7 +24,7 @@ export function withDashboardLayout<P>(PageComponent: ComponentType<P>) {
         {/* Sidebar desktop */}
         <Sidebar />
 
-        <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full h-screen overflow-y-auto'>
+        <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full'>
           <Navbar />
 
           {/* Menu mobile horizontal (visible uniquement sur téléphone) */}

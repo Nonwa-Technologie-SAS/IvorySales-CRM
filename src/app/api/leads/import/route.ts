@@ -148,8 +148,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       created: created.length,
       total: rows.length,
-      errors: errors.length ? errors : undefined,
-      ids: created.map((c) => c.id),
+      errors,
     });
   } catch (error) {
     console.error('POST /api/leads/import error', error);
