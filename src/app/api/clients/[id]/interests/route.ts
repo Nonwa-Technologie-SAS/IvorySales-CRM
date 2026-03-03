@@ -237,7 +237,7 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: error.errors.map((e) => e.message).join(", ") },
+        { error: error.issues.map((e) => e.message).join(", ") },
         { status: 400 },
       );
     }

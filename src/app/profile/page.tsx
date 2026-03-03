@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import NeumoCard from "@/components/NeumoCard";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -890,5 +890,19 @@ function ProfilePageInner() {
   );
 }
 
-const ProfilePage = withDashboardLayout(ProfilePageInner);
+function ProfilePageWithSearchParams() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-2 text-xs text-gray-500">
+          Chargement du profil…
+        </div>
+      }
+    >
+      <ProfilePageInner />
+    </Suspense>
+  );
+}
+
+const ProfilePage = withDashboardLayout(ProfilePageWithSearchParams);
 export default ProfilePage;

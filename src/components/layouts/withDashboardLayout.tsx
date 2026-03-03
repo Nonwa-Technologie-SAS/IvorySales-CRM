@@ -4,10 +4,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
 import Sidebar, { getSidebarItemsForRole } from '@/components/Sidebar';
 import { usePathname, useRouter } from 'next/navigation';
-import type { ComponentType, PropsWithChildren } from 'react';
+import type { ComponentType, FC } from 'react';
 
-export function withDashboardLayout<P>(PageComponent: ComponentType<P>) {
-  const Wrapped = (props: PropsWithChildren<P>) => {
+export function withDashboardLayout<P extends object>(
+  PageComponent: ComponentType<P>,
+) {
+  const Wrapped: FC<P> = (props) => {
     const pathname = usePathname();
     const router = useRouter();
     const { user } = useAuth();
@@ -56,7 +58,7 @@ export function withDashboardLayout<P>(PageComponent: ComponentType<P>) {
           </nav>
 
           {/* Contenu spécifique à chaque page dashboard */}
-          <PageComponent {...(props as P)} />
+          <PageComponent {...props} />
         </main>
       </div>
     );

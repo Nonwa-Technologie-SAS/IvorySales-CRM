@@ -1,7 +1,7 @@
-import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { requireRole } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const updateGoalSchema = z.object({
   targetConversions: z.number().int().min(0).optional(),
@@ -11,15 +11,15 @@ const updateGoalSchema = z.object({
 /** PATCH : modifier un objectif — ADMIN ou MANAGER, même company. */
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireRole(["ADMIN", "MANAGER"]);
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user } = auth;
   if (!user.companyId) {
     return NextResponse.json(
-      { error: "Utilisateur sans entreprise" },
-      { status: 403 }
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
     );
   }
   try {
@@ -29,10 +29,13 @@ export async function PATCH(
       select: { companyId: true },
     });
     if (!existing) {
-      return NextResponse.json({ error: "Objectif introuvable" }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Objectif introuvable' },
+        { status: 404 },
+      );
     }
     if (existing.companyId !== user.companyId) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
     }
 
     const json = await req.json();
@@ -58,14 +61,14 @@ export async function PATCH(
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json(
-        { error: e.errors.map((err) => err.message).join(" ; ") },
-        { status: 400 }
+        { error: e.issues.map((err) => err.message).join(' ; ') },
+        { status: 400 },
       );
     }
-    console.error("PATCH /api/goals/[id] error", e);
+    console.error('PATCH /api/goals/[id] error', e);
     return NextResponse.json(
       { error: "Impossible de modifier l'objectif" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -73,15 +76,15 @@ export async function PATCH(
 /** DELETE : supprimer un objectif — ADMIN ou MANAGER, même company. */
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireRole(["ADMIN", "MANAGER"]);
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user } = auth;
   if (!user.companyId) {
     return NextResponse.json(
-      { error: "Utilisateur sans entreprise" },
-      { status: 403 }
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
     );
   }
   try {
@@ -91,19 +94,22 @@ export async function DELETE(
       select: { companyId: true },
     });
     if (!existing) {
-      return NextResponse.json({ error: "Objectif introuvable" }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Objectif introuvable' },
+        { status: 404 },
+      );
     }
     if (existing.companyId !== user.companyId) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
     }
 
     await prisma.salesGoal.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("DELETE /api/goals/[id] error", error);
+    console.error('DELETE /api/goals/[id] error', error);
     return NextResponse.json(
       { error: "Impossible de supprimer l'objectif" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

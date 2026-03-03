@@ -3,7 +3,7 @@
 import { withOfflineLayout } from "@/components/layouts/withOfflineLayout";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { Smartphone } from "lucide-react";
 
 function LoginMfaPageInner() {
@@ -134,6 +134,20 @@ function LoginMfaPageInner() {
   );
 }
 
-const LoginMfaPage = withOfflineLayout(LoginMfaPageInner);
+function LoginMfaPageWithSearchParams() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-4 text-xs">
+          <p className="text-gray-500">Chargement…</p>
+        </div>
+      }
+    >
+      <LoginMfaPageInner />
+    </Suspense>
+  );
+}
+
+const LoginMfaPage = withOfflineLayout(LoginMfaPageWithSearchParams);
 
 export default LoginMfaPage;

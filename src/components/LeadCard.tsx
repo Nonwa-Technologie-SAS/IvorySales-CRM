@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import type React from "react";
 import TextToSpeech from "./TextToSpeech";
 
 export interface Lead {
@@ -38,7 +39,7 @@ interface LeadCardProps {
   lead: Lead;
   onClick?: () => void;
   draggable?: boolean;
-  onDragStart?: (e: React.DragEvent) => void;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
 }
 
 export default function LeadCard({ lead, onClick, draggable, onDragStart }: LeadCardProps) {
@@ -49,7 +50,9 @@ export default function LeadCard({ lead, onClick, draggable, onDragStart }: Lead
     <motion.div
       onClick={onClick}
       draggable={draggable}
-      onDragStart={onDragStart}
+      // framer-motion typage onDragStart (pan) ≠ DragEvent HTML5,
+      // on caste donc pour laisser passer l'événement natif de drag & drop.
+      onDragStart={onDragStart as any}
       className={`relative bg-white/80 rounded-2xl border border-white/70 shadow-neu-soft flex flex-col gap-3 cursor-pointer hover:-translate-y-0.5 hover:shadow-neu transition-all p-4 ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       }`}

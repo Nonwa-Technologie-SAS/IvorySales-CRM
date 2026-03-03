@@ -1,23 +1,23 @@
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const createProductSchema = z.object({
-  name: z.string().min(1, "Le nom est requis"),
+  name: z.string().min(1, 'Le nom est requis'),
   companyId: z.string().optional(),
 });
 
 export async function GET() {
   try {
     const products = await prisma.product.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(products);
   } catch (error) {
-    console.error("GET /api/products error", error);
+    console.error('GET /api/products error', error);
     return NextResponse.json(
-      { error: "Impossible de récupérer les produits" },
-      { status: 500 }
+      { error: 'Impossible de récupérer les produits' },
+      { status: 500 },
     );
   }
 }
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       const company =
         existing ??
         (await prisma.company.create({
-          data: { name: "Entreprise démo", plan: "free" },
+          data: { name: 'Entreprise démo', plan: 'free' },
         }));
       companyId = company.id;
     }
@@ -49,14 +49,14 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: error.errors.map((e) => e.message).join(", ") },
-        { status: 400 }
+        { error: error.issues.map((e) => e.message).join(', ') },
+        { status: 400 },
       );
     }
-    console.error("POST /api/products error", error);
+    console.error('POST /api/products error', error);
     return NextResponse.json(
-      { error: "Impossible de créer le produit" },
-      { status: 500 }
+      { error: 'Impossible de créer le produit' },
+      { status: 500 },
     );
   }
 }

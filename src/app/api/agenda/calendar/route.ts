@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 
 /**
@@ -46,7 +47,7 @@ export async function GET(req: Request) {
     }
 
     // Construction du where de base : société + plage de dates
-    const where: Parameters<typeof prisma.agendaItem.findMany>[0]["where"] = {
+    let where: Prisma.AgendaItemWhereInput = {
       dueDate: { gte: from, lte: to },
       lead: {
         companyId: authUser.companyId,
@@ -54,15 +55,23 @@ export async function GET(req: Request) {
     };
 
     if (authUser.role === "AGENT") {
-      // Un agent voit les leads qui lui sont assignés
-      // ainsi que les leads non assignés (assignedTo = null),
-      // afin que les tâches créées sur des leads importés/non affectés
-      // apparaissent bien dans son agenda.
-      where.lead = {
-        ...where.lead,
+      // Un agent voit les tâches dont le lead appartient à sa société
+      // ET soit lui est assigné, soit n'est assigné à personne.
+      where = {
+        dueDate: { gte: from, lte: to },
         OR: [
-          { assignedTo: authUser.id },
-          { assignedTo: null },
+          {
+            lead: {
+              companyId: authUser.companyId,
+              assignedTo: authUser.id,
+            },
+          },
+          {
+            lead: {
+              companyId: authUser.companyId,
+              assignedTo: null,
+            },
+          },
         ],
       };
     } else if (userIdFilter) {
@@ -77,9 +86,12 @@ export async function GET(req: Request) {
           { status: 403 }
         );
       }
-      where.lead = {
-        ...where.lead,
-        assignedTo: userIdFilter,
+      where = {
+        dueDate: { gte: from, lte: to },
+        lead: {
+          companyId: authUser.companyId,
+          assignedTo: userIdFilter,
+        },
       };
     }
 

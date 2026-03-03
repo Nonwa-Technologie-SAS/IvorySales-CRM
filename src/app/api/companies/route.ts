@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const msg = error.errors.map((e) => e.message).join(' ; ');
+      const msg = error.issues.map((e) => e.message).join(' ; ');
       return NextResponse.json({ error: msg }, { status: 400 });
     }
     console.error('POST /api/companies error', error);

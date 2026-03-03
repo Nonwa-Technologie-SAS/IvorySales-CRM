@@ -1,12 +1,13 @@
-import { getCurrentUser, requireRole } from "@/lib/auth";
-import { getPeriodBounds, getPeriodLabel } from "@/lib/goalPeriods";
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { getCurrentUser, requireRole } from '@/lib/auth';
+import { getPeriodBounds, getPeriodLabel } from '@/lib/goalPeriods';
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import type { Prisma, GoalPeriodType } from '@prisma/client';
 
 const createGoalSchema = z.object({
   userId: z.string().min(1),
-  periodType: z.enum(["MONTH", "QUARTER", "SEMESTER", "YEAR"]),
+  periodType: z.enum(['MONTH', 'QUARTER', 'SEMESTER', 'YEAR']),
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12).optional(),
   quarter: z.number().int().min(1).max(4).optional(),
@@ -17,13 +18,13 @@ const createGoalSchema = z.object({
 
 /** POST : créer ou mettre à jour un objectif — ADMIN ou MANAGER uniquement. */
 export async function POST(req: Request) {
-  const auth = await requireRole(["ADMIN", "MANAGER"]);
+  const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user } = auth as { user: { id: string; companyId: string | null } };
   if (!user.companyId) {
     return NextResponse.json(
-      { error: "Utilisateur sans entreprise" },
-      { status: 403 }
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
     );
   }
   try {
@@ -36,8 +37,8 @@ export async function POST(req: Request) {
     });
     if (!targetUser || targetUser.companyId !== user.companyId) {
       return NextResponse.json(
-        { error: "Utilisateur non trouvé ou autre entreprise" },
-        { status: 403 }
+        { error: 'Utilisateur non trouvé ou autre entreprise' },
+        { status: 403 },
       );
     }
 
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
       body.year,
       body.month,
       body.quarter,
-      body.semester
+      body.semester,
     );
 
     const goal = await prisma.salesGoal.upsert({
@@ -82,17 +83,17 @@ export async function POST(req: Request) {
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json(
-        { error: e.errors.map((err) => err.message).join(" ; ") },
-        { status: 400 }
+        { error: e.issues.map((err) => err.message).join(' ; ') },
+        { status: 400 },
       );
     }
-    if (e instanceof Error && e.message.includes("doit être")) {
+    if (e instanceof Error && e.message.includes('doit être')) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
-    console.error("POST /api/goals error", e);
+    console.error('POST /api/goals error', e);
     return NextResponse.json(
       { error: "Impossible de créer ou mettre à jour l'objectif" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -101,28 +102,25 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
   }
   if (!currentUser.companyId) {
     return NextResponse.json(
-      { error: "Utilisateur sans entreprise" },
-      { status: 403 }
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
     );
   }
 
   const url = new URL(req.url);
-  const userIdParam = url.searchParams.get("userId");
-  const periodTypeParam = url.searchParams.get("periodType");
-  const yearParam = url.searchParams.get("year");
+  const userIdParam = url.searchParams.get('userId');
+  const periodTypeParam = url.searchParams.get('periodType');
+  const yearParam = url.searchParams.get('year');
 
-  const where: {
-    companyId: string;
-    userId?: string;
-    periodType?: string;
-    periodStart?: { gte: Date; lte: Date };
-  } = { companyId: currentUser.companyId };
+  let where: Prisma.SalesGoalWhereInput = {
+    companyId: currentUser.companyId,
+  };
 
-  if (currentUser.role === "AGENT") {
+  if (currentUser.role === 'AGENT') {
     where.userId = currentUser.id;
   } else if (userIdParam) {
     const target = await prisma.user.findUnique({
@@ -131,15 +129,21 @@ export async function GET(req: Request) {
     });
     if (!target || target.companyId !== currentUser.companyId) {
       return NextResponse.json(
-        { error: "Utilisateur non trouvé ou autre entreprise" },
-        { status: 403 }
+        { error: 'Utilisateur non trouvé ou autre entreprise' },
+        { status: 403 },
       );
     }
     where.userId = userIdParam;
   }
 
   if (periodTypeParam) {
-    where.periodType = periodTypeParam as "MONTH" | "QUARTER" | "SEMESTER" | "YEAR";
+    const allowed: GoalPeriodType[] = ['MONTH', 'QUARTER', 'SEMESTER', 'YEAR'];
+    if (allowed.includes(periodTypeParam as GoalPeriodType)) {
+      where = {
+        ...where,
+        periodType: periodTypeParam as GoalPeriodType,
+      };
+    }
   }
   if (yearParam) {
     const y = parseInt(yearParam, 10);
@@ -158,7 +162,7 @@ export async function GET(req: Request) {
         user: { select: { id: true, name: true, email: true } },
         setBy: { select: { id: true, name: true } },
       },
-      orderBy: [{ userId: "asc" }, { periodStart: "desc" }],
+      orderBy: [{ userId: 'asc' }, { periodStart: 'desc' }],
     });
 
     const withRealized = await Promise.all(
@@ -195,15 +199,15 @@ export async function GET(req: Request) {
           realizedConversions,
           realizedRevenue,
         };
-      })
+      }),
     );
 
     return NextResponse.json(withRealized);
   } catch (error) {
-    console.error("GET /api/goals error", error);
+    console.error('GET /api/goals error', error);
     return NextResponse.json(
-      { error: "Impossible de récupérer les objectifs" },
-      { status: 500 }
+      { error: 'Impossible de récupérer les objectifs' },
+      { status: 500 },
     );
   }
 }
