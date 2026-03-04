@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
+
+type AgendaItemWhereInput = NonNullable<
+  Parameters<typeof prisma.agendaItem.findMany>[0]
+>["where"];
 
 /**
  * GET /api/agenda/calendar?from=ISO&to=ISO[&userId=...]
@@ -47,7 +50,7 @@ export async function GET(req: Request) {
     }
 
     // Construction du where de base : société + plage de dates
-    let where: Prisma.AgendaItemWhereInput = {
+    let where: AgendaItemWhereInput = {
       dueDate: { gte: from, lte: to },
       lead: {
         companyId: authUser.companyId,
