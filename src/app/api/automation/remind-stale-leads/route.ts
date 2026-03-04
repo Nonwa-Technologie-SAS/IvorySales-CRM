@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     dueDate.setDate(dueDate.getDate() + 1);
 
     const tasks = await prisma.$transaction(
-      leads.map((lead) =>
+      leads.map((lead: { id: string }) =>
         prisma.agendaItem.create({
           data: {
             leadId: lead.id,

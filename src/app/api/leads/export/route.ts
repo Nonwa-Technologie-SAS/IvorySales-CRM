@@ -37,7 +37,8 @@ export async function GET() {
       "Prenoms",
     ];
 
-    const rows = leads.map((lead) => [
+    type LeadRow = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; source: string | null; status: string; companyName: string | null; activityDomain: string | null; location: string | null; createdAt: Date; civility: string | null; assignedTo: string | null; notes: string | null };
+    const rows = leads.map((lead: LeadRow) => [
       lead.activityDomain ?? "",
       lead.companyName ?? "",
       lead.phone ?? "",
