@@ -46,14 +46,16 @@ export async function GET(
         }),
       ]);
 
+      type ProductInterestRow = { productId: string; product: { name: string }; estimatedValue: number };
+      type ServiceInterestRow = { serviceId: string; service: { name: string }; estimatedValue: number };
       return NextResponse.json({
-        products: productInterests.map((pi) => ({
+        products: productInterests.map((pi: ProductInterestRow) => ({
           kind: "product" as const,
           id: pi.productId,
           name: pi.product.name,
           estimatedValue: pi.estimatedValue,
         })),
-        services: serviceInterests.map((si) => ({
+        services: serviceInterests.map((si: ServiceInterestRow) => ({
           kind: "service" as const,
           id: si.serviceId,
           name: si.service.name,
