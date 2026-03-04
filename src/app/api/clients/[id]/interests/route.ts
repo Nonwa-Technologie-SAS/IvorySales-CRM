@@ -12,6 +12,8 @@ const upsertInterestsSchema = z.object({
   items: z.array(interestItemSchema),
 });
 
+type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -198,7 +200,7 @@ export async function PUT(
 
     // Enregistrer en base de données
     try {
-      await prisma.$transaction(async (t) => {
+      await prisma.$transaction(async (t: PrismaTx) => {
         // Supprimer les anciens intérêts
         await t.clientProductInterest.deleteMany({
           where: { clientId: id },
