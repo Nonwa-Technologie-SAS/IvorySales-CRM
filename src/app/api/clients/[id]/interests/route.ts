@@ -1,9 +1,9 @@
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const interestItemSchema = z.object({
-  kind: z.enum(["product", "service"]),
+  kind: z.enum(['product', 'service']),
   id: z.string().min(1),
   estimatedValue: z.number().nonnegative().default(0),
 });
@@ -26,7 +26,7 @@ export async function GET(
 
     if (!client) {
       return NextResponse.json(
-        { error: "Client introuvable" },
+        { error: 'Client introuvable' },
         { status: 404 },
       );
     }
@@ -37,40 +37,48 @@ export async function GET(
         prisma.clientProductInterest.findMany({
           where: { clientId: id },
           include: { product: true },
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: 'asc' },
         }),
         prisma.clientServiceInterest.findMany({
           where: { clientId: id },
           include: { service: true },
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: 'asc' },
         }),
       ]);
 
-      type ProductInterestRow = { productId: string; product: { name: string }; estimatedValue: number };
-      type ServiceInterestRow = { serviceId: string; service: { name: string }; estimatedValue: number };
+      type ProductInterestRow = {
+        productId: string;
+        product: { name: string };
+        estimatedValue: number;
+      };
+      type ServiceInterestRow = {
+        serviceId: string;
+        service: { name: string };
+        estimatedValue: number;
+      };
       return NextResponse.json({
         products: productInterests.map((pi: ProductInterestRow) => ({
-          kind: "product" as const,
+          kind: 'product' as const,
           id: pi.productId,
           name: pi.product.name,
           estimatedValue: pi.estimatedValue,
         })),
         services: serviceInterests.map((si: ServiceInterestRow) => ({
-          kind: "service" as const,
+          kind: 'service' as const,
           id: si.serviceId,
           name: si.service.name,
           estimatedValue: si.estimatedValue,
         })),
       });
-    } catch (modelError: any) {
+    } catch (modelError: unknown) {
       // Si les modèles n'existent pas encore (migration non appliquée),
       // on renvoie des listes vides plutôt qu'une erreur 500
       if (
-        modelError?.message?.includes("clientProductInterest") ||
-        modelError?.message?.includes("clientServiceInterest")
+        (modelError as Error)?.message?.includes('clientProductInterest') ||
+        (modelError as Error)?.message?.includes('clientServiceInterest')
       ) {
         console.warn(
-          "Modèles ClientProductInterest/ClientServiceInterest non disponibles. Migration nécessaire.",
+          'Modèles ClientProductInterest/ClientServiceInterest non disponibles. Migration nécessaire.',
         );
         return NextResponse.json({
           products: [],
@@ -80,9 +88,9 @@ export async function GET(
       throw modelError;
     }
   } catch (error) {
-    console.error("GET /api/clients/[id]/interests error", error);
+    console.error('GET /api/clients/[id]/interests error', error);
     return NextResponse.json(
-      { error: "Impossible de récupérer les intérêts du client" },
+      { error: 'Impossible de récupérer les intérêts du client' },
       { status: 500 },
     );
   }
@@ -100,7 +108,7 @@ export async function PUT(
       json = await req.json();
     } catch {
       return NextResponse.json(
-        { error: "Corps de requête JSON invalide ou vide" },
+        { error: 'Corps de requête JSON invalide ou vide' },
         { status: 400 },
       );
     }
@@ -114,17 +122,19 @@ export async function PUT(
 
     if (!client) {
       return NextResponse.json(
-        { error: "Client introuvable" },
+        { error: 'Client introuvable' },
         { status: 404 },
       );
     }
 
     // Filtrer les items valides (avec id non vide)
-    const validItems = body.items.filter((item) => item.id && item.id.trim() !== "");
+    const validItems = body.items.filter(
+      (item) => item.id && item.id.trim() !== '',
+    );
 
     // Séparer produits et services
-    const productItems = validItems.filter((item) => item.kind === "product");
-    const serviceItems = validItems.filter((item) => item.kind === "service");
+    const productItems = validItems.filter((item) => item.kind === 'product');
+    const serviceItems = validItems.filter((item) => item.kind === 'service');
 
     // Vérifier que les produits/services existent
     if (productItems.length > 0) {
@@ -133,12 +143,16 @@ export async function PUT(
         where: { id: { in: productIds } },
         select: { id: true },
       });
-      const existingProductIds = new Set(existingProducts.map((p) => p.id));
-      const invalidProducts = productIds.filter((pid) => !existingProductIds.has(pid));
-      
+      const existingProductIds = new Set(
+        existingProducts.map((p: { id: string }) => p.id),
+      );
+      const invalidProducts = productIds.filter(
+        (pid) => !existingProductIds.has(pid),
+      );
+
       if (invalidProducts.length > 0) {
         return NextResponse.json(
-          { error: `Produits introuvables: ${invalidProducts.join(", ")}` },
+          { error: `Produits introuvables: ${invalidProducts.join(', ')}` },
           { status: 400 },
         );
       }
@@ -150,12 +164,16 @@ export async function PUT(
         where: { id: { in: serviceIds } },
         select: { id: true },
       });
-      const existingServiceIds = new Set(existingServices.map((s) => s.id));
-      const invalidServices = serviceIds.filter((sid) => !existingServiceIds.has(sid));
-      
+      const existingServiceIds = new Set(
+        existingServices.map((s: { id: string }) => s.id),
+      );
+      const invalidServices = serviceIds.filter(
+        (sid) => !existingServiceIds.has(sid),
+      );
+
       if (invalidServices.length > 0) {
         return NextResponse.json(
-          { error: `Services introuvables: ${invalidServices.join(", ")}` },
+          { error: `Services introuvables: ${invalidServices.join(', ')}` },
           { status: 400 },
         );
       }
@@ -170,9 +188,9 @@ export async function PUT(
       return NextResponse.json(
         {
           error:
-            "Modèles intérêts client non disponibles. Exécutez dans le dossier crm-nextjs : npx prisma generate",
+            'Modèles intérêts client non disponibles. Exécutez dans le dossier crm-nextjs : npx prisma generate',
           details:
-            "Le client Prisma doit être régénéré pour inclure ClientProductInterest et ClientServiceInterest.",
+            'Le client Prisma doit être régénéré pour inclure ClientProductInterest et ClientServiceInterest.',
         },
         { status: 503 },
       );
@@ -219,17 +237,17 @@ export async function PUT(
       const msg =
         modelError instanceof Error ? modelError.message : String(modelError);
       if (
-        msg.includes("clientProductInterest") ||
-        msg.includes("clientServiceInterest") ||
-        msg.includes("deleteMany") ||
-        msg.includes("createMany")
+        msg.includes('clientProductInterest') ||
+        msg.includes('clientServiceInterest') ||
+        msg.includes('deleteMany') ||
+        msg.includes('createMany')
       ) {
         return NextResponse.json(
           {
             error:
               "Régénérez le client Prisma : npx prisma generate (dans crm-nextjs). Si les tables n'existent pas, exécutez aussi : npx prisma migrate dev",
             details:
-              "Les modèles ClientProductInterest et ClientServiceInterest ne sont pas disponibles.",
+              'Les modèles ClientProductInterest et ClientServiceInterest ne sont pas disponibles.',
           },
           { status: 503 },
         );
@@ -239,15 +257,14 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: error.issues.map((e) => e.message).join(", ") },
+        { error: error.issues.map((e) => e.message).join(', ') },
         { status: 400 },
       );
     }
-    console.error("PUT /api/clients/[id]/interests error", error);
+    console.error('PUT /api/clients/[id]/interests error', error);
     return NextResponse.json(
       { error: "Impossible d'enregistrer les intérêts du client" },
       { status: 500 },
     );
   }
 }
-
