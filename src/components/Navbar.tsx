@@ -40,6 +40,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    window.dispatchEvent(new Event('auth:changed'));
     router.push('/login');
   };
 
@@ -50,7 +51,7 @@ export default function Navbar() {
           {user ? `Bonjour, ${user.name}` : 'Bonjour'}
         </span>
         <h1 className='text-lg md:text-2xl font-semibold text-primary'>
-          Vue d&apos;ensemble CRM
+          Vue d&apos;ensemble KpiTracker
         </h1>
       </div>
 

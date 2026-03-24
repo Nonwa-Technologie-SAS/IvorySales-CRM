@@ -70,44 +70,41 @@ export function ChartPieDonut() {
   );
 
   useEffect(() => {
-    (async () => {
+    const fetchStatusDistribution = async () => {
       try {
-        const res = await fetch('/api/leads');
+        const res = await fetch('/api/dashboard/lead-status-distribution', {
+          cache: 'no-store',
+        });
         if (!res.ok) return;
-        const leads = await res.json();
-
-        const counts: Record<string, number> = {
-          NEW: 0,
-          CONTACTED: 0,
-          QUALIFIED: 0,
-          LOST: 0,
-          CONVERTED: 0,
-        };
-
-        for (const lead of leads) {
-          const status = lead.status as string;
-          if (status in counts) {
-            counts[status] += 1;
-          }
-        }
-
-        const chartData = Object.entries(counts).map(
-          ([status, count], index) => ({
-            status,
-            count,
-            fill: `var(--chart-${index + 1})`,
-          }),
-        );
+        const rows = (await res.json()) as Array<{ status: string; count: number }>;
+        const chartData = rows.map((row, index) => ({
+          status: row.status,
+          count: Number(row.count ?? 0),
+          fill: `var(--chart-${index + 1})`,
+        }));
 
         const sum = chartData.reduce((acc, d) => acc + d.count, 0);
         if (sum > 0) {
           setData(chartData);
           setTotal(sum);
+        } else {
+          setData(defaultChartData.map((d) => ({ ...d, count: 0 })));
+          setTotal(0);
         }
       } catch {
         // en cas d'erreur on garde les données par défaut
       }
-    })();
+    };
+
+    void fetchStatusDistribution();
+
+    const onInvalidate = () => {
+      void fetchStatusDistribution();
+    };
+    window.addEventListener('crm:goals-invalidate', onInvalidate);
+    return () => {
+      window.removeEventListener('crm:goals-invalidate', onInvalidate);
+    };
   }, []);
 
   return (
@@ -262,11 +259,13 @@ export function ChartPieDonutBySource() {
   const [chartConfig] = useState<ChartConfig>(defaultSourceChartConfig);
 
   useEffect(() => {
-    (async () => {
+    const fetchSourceDistribution = async () => {
       try {
-        const res = await fetch('/api/leads');
+        const res = await fetch('/api/dashboard/lead-source-distribution', {
+          cache: 'no-store',
+        });
         if (!res.ok) return;
-        const leads = await res.json();
+        const leads = (await res.json()) as Array<{ source: string | null }>;
 
         const counts: Record<string, number> = {};
         ACQUISITION_SOURCES.forEach((src) => {
@@ -294,7 +293,17 @@ export function ChartPieDonutBySource() {
       } catch {
         // en cas d'erreur on garde les données par défaut
       }
-    })();
+    };
+
+    void fetchSourceDistribution();
+
+    const onInvalidate = () => {
+      void fetchSourceDistribution();
+    };
+    window.addEventListener('crm:goals-invalidate', onInvalidate);
+    return () => {
+      window.removeEventListener('crm:goals-invalidate', onInvalidate);
+    };
   }, []);
 
   return (

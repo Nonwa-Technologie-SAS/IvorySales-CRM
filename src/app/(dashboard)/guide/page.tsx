@@ -22,7 +22,7 @@ function GuidePageInner() {
       <section className='flex flex-col gap-2'>
         <h1 className='text-xl md:text-2xl font-semibold text-primary flex items-center gap-2'>
           <BookOpen className='w-6 h-6' />
-          Guide d&apos;utilisation - IvoireLead CRM
+          Guide d&apos;utilisation - KpiTracker
         </h1>
         <p className='text-sm text-gray-500'>
           Retrouvez ici l&apos;essentiel pour utiliser le CRM au quotidien.
@@ -355,7 +355,7 @@ function GuidePageInner() {
 
       <p className='text-[11px] text-gray-400 mt-4'>
         Pour toute question, contactez votre administrateur ou le support
-        IvoireLead CRM.
+        KpiTracker.
       </p>
     </div>
   );

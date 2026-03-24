@@ -20,6 +20,8 @@ const createSaleSchema = z.object({
   items: z.array(saleItemSchema).min(1),
 });
 
+type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 /** POST /api/sales
  * Enregistre une vente pour un client, par le user connecté.
  * Rôles autorisés : ADMIN, MANAGER, AGENT.
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
       0,
     );
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: PrismaTx) => {
       const sale = await tx.sale.create({
         data: {
           clientId: client.id,

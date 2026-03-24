@@ -1,4 +1,5 @@
 import { AuthProvider } from '@/contexts/AuthContext';
+import { Analytics } from '@vercel/analytics/next';
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
@@ -21,18 +22,18 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   ),
   title: {
-    default: 'IvoireLead CRM',
-    template: '%s | IvoireLead CRM',
+    default: 'KpiTracker',
+    template: '%s | KpiTracker',
   },
   description:
-    'IvoireLead CRM : CRM commercial fullstack moderne pour suivre vos leads, objectifs et ventes.',
-  keywords: ['CRM', 'prospects', 'leads', 'ventes', 'Next.js', 'dashboard'],
-  authors: [{ name: 'IvoireLead CRM' }],
-  creator: 'IvoireLead CRM',
+    'KpiTracker : CRM commercial fullstack moderne pour suivre vos leads, objectifs et ventes.',
+  keywords: ['KpiTracker', 'CRM', 'prospects', 'leads', 'ventes', 'Next.js', 'dashboard'],
+  authors: [{ name: 'KpiTracker' }],
+  creator: 'KpiTracker',
   openGraph: {
     type: 'website',
     locale: 'fr_FR',
-    siteName: 'IvoireLead CRM',
+    siteName: 'KpiTracker',
   },
   robots: {
     index: true,
@@ -53,6 +54,7 @@ export default function RootLayout({
         <AuthProvider>
           {/* <Navbar /> */}
           <div className='md:pt-0'>{children}</div>
+          <Analytics />
         </AuthProvider>
       </body>
     </html>

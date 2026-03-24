@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "CRM";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "KpiTracker";
 
 /**
  * POST /api/profile/mfa/setup

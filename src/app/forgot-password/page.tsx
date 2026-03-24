@@ -53,10 +53,10 @@ export default function ForgotPasswordPage() {
           {/* Logo + nom app */}
           <div className="mb-2 flex items-center gap-2">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white font-semibold shadow-md">
-              C
+              K
             </div>
             <span className="text-sm font-semibold text-gray-800">
-              IvoireLead CRM
+              KpiTracker
             </span>
           </div>
 
@@ -137,7 +137,7 @@ export default function ForgotPasswordPage() {
               Sécurité & récupération de compte
             </div>
             <h2 className="text-2xl font-semibold text-white">
-              Récupérez l&apos;accès à votre espace CRM en toute simplicité.
+              Récupérez l&apos;accès à votre espace KpiTracker en toute simplicité.
             </h2>
             <p className="text-sm text-white/70">
               Entrez votre adresse professionnelle, nous vous enverrons un lien de

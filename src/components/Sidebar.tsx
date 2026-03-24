@@ -85,9 +85,9 @@ export default function Sidebar() {
             type='button'
             onClick={() => handleNavigate('/')}
             className='h-9 px-3 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-500 shadow-neu flex items-center justify-center text-white text-[11px] font-semibold tracking-wide'
-            aria-label='IvoireLead CRM'
+            aria-label='KpiTracker'
           >
-            {expanded ? 'IvoireLead CRM' : 'IL'}
+            {expanded ? 'KpiTracker' : 'KT'}
           </button>
           <button
             type='button'

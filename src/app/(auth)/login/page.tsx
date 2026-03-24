@@ -47,6 +47,7 @@ export default function LoginPage() {
         return;
       }
 
+      window.dispatchEvent(new Event("auth:changed"));
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");
@@ -64,11 +65,11 @@ export default function LoginPage() {
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2">
               <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-lg font-bold shadow-md">
-                C
+                K
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-primary">
-                  IvoireLead CRM
+                  KpiTracker
                 </span>
                 <span className="text-[11px] text-gray-500">
                   Portail sécurisé des équipes commerciales
@@ -129,35 +130,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Séparateur */}
-          <div className="flex items-center gap-3 text-[11px] text-gray-400">
-            <span className="h-px flex-1 bg-gray-200" />
-            <span>ou</span>
-            <span className="h-px flex-1 bg-gray-200" />
-          </div>
-
-          {/* Boutons sociaux (placeholder) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-[10px]">
-                G
-              </span>
-              <span>Continuer avec Google</span>
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-[10px] text-white">
-                GH
-              </span>
-              <span>Continuer avec GitHub</span>
-            </button>
-          </div>
-
           {/* Texte bas de page */}
           <div className="space-y-1.5 text-[11px] text-gray-500">
             <p>
@@ -196,7 +168,7 @@ export default function LoginPage() {
             </h2>
             <p className="text-sm text-violet-100/80 leading-relaxed">
               Centralisez votre prospection, vos relances et vos ventes dans un
-              CRM pensé pour les équipes commerciales en Côte d&apos;Ivoire.
+              KpiTracker pensé pour les équipes commerciales en Côte d&apos;Ivoire.
               Visualisez vos performances et atteignez vos objectifs plus
               rapidement.
             </p>

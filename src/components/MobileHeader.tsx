@@ -17,10 +17,10 @@ export default function MobileHeader() {
           className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 shadow-neu hover:shadow-neu-soft transition-shadow"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-br from-violet-500 to-indigo-500 text-xs font-semibold text-white shadow-neu">
-            C
+            K
           </span>
           <span className="text-[11px] font-medium text-gray-700">
-            CRM Mobile
+            KpiTracker Mobile
           </span>
         </button>
 

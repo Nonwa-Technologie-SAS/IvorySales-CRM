@@ -30,6 +30,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const AUTH_CHANGED_EVENT = 'auth:changed';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -37,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await fetch('/api/auth/me', { cache: 'no-store' });
       if (!res.ok) {
         setUser(null);
         return;
@@ -61,6 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchUser();
+  }, [fetchUser]);
+
+  useEffect(() => {
+    const handleAuthChanged = () => {
+      setLoading(true);
+      void fetchUser();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
+      }
+    };
   }, [fetchUser]);
 
   const hasRole = useCallback(

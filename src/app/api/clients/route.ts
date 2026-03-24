@@ -7,6 +7,8 @@ const convertLeadSchema = z.object({
   leadId: z.string().min(1),
 });
 
+type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 export async function GET() {
   try {
     const clients = await prisma.client.findMany({
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: PrismaTx) => {
       const client = await tx.client.create({
         data: {
           name: `${lead.firstName} ${lead.lastName}`.trim(),
