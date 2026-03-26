@@ -30,6 +30,13 @@ interface GoalWithRealized {
   realizedRevenue: number;
 }
 
+type TenderLite = {
+  id: string;
+  title: string;
+  status: string;
+  dueDate?: string | null;
+};
+
 function ProfilePageInner() {
   const { user: authUser } = useAuth();
   const searchParams = useSearchParams();
@@ -66,6 +73,8 @@ function ProfilePageInner() {
   const [mfaVerifyLoading, setMfaVerifyLoading] = useState(false);
   const [goals, setGoals] = useState<GoalWithRealized[]>([]);
   const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [tenders, setTenders] = useState<TenderLite[]>([]);
+  const [tendersLoading, setTendersLoading] = useState(false);
 
   const isSelf =
     !viewedUserId || (authUser && viewedUserId === authUser.id);
@@ -144,6 +153,43 @@ function ProfilePageInner() {
         setGoals(data);
       } catch {
         // silencieux
+      }
+    })();
+  }, [authUser, viewedUserId]);
+
+  // Mes appels d’offre : pour soi-même → /api/tenders (AGENT reçoit déjà “assignés”),
+  // pour admin/manager qui consulte un membre → /api/tenders?assigneeId=targetId
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!authUser) return;
+        const targetId = viewedUserId ?? authUser.id;
+        const canQueryOther =
+          (authUser.role === "admin" || authUser.role === "manager") &&
+          !!viewedUserId &&
+          viewedUserId !== authUser.id;
+        const url = canQueryOther
+          ? `/api/tenders?assigneeId=${encodeURIComponent(targetId)}`
+          : "/api/tenders";
+        setTendersLoading(true);
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: TenderLite[] = Array.isArray(data)
+          ? data
+              .map((t: any) => ({
+                id: String(t.id),
+                title: String(t.title ?? ""),
+                status: String(t.status ?? "OPEN"),
+                dueDate: t.dueDate ?? null,
+              }))
+              .filter((t) => t.id && t.title)
+          : [];
+        setTenders(mapped);
+      } catch {
+        setTenders([]);
+      } finally {
+        setTendersLoading(false);
       }
     })();
   }, [authUser, viewedUserId]);
@@ -407,7 +453,7 @@ function ProfilePageInner() {
         {/* Colonne gauche : carte résumé utilisateur */}
         <NeumoCard className="lg:col-span-1 bg-white p-5 flex flex-col gap-4 shadow-neu-soft">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-white flex items-center justify-center text-lg font-semibold">
+            <div className="w-12 h-12 rounded-full bg-linear-to-br from-violet-500 to-indigo-500 text-white flex items-center justify-center text-lg font-semibold">
               {user?.name?.[0] ?? "?"}
             </div>
             <div className="flex flex-col">
@@ -884,6 +930,56 @@ function ProfilePageInner() {
               )}
             </NeumoCard>
           )}
+
+          <NeumoCard className="bg-white p-5 shadow-neu-soft flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-primary">
+                Mes appels d’offre
+              </h2>
+            </div>
+            {tendersLoading ? (
+              <div className="space-y-2">
+                <div className="h-10 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />
+                <div className="h-10 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />
+              </div>
+            ) : tenders.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                Aucun appel d’offre assigné pour le moment.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {tenders.slice(0, 8).map((t) => (
+                  <a
+                    key={t.id}
+                    href={`/tenders/${t.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2 hover:bg-gray-100 transition"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-medium text-primary truncate">
+                        {t.title}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        Statut : <span className="text-gray-700">{t.status}</span>
+                        {t.dueDate
+                          ? ` · Échéance ${new Date(t.dueDate).toLocaleDateString("fr-FR")}`
+                          : ""}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-gray-400">Voir</span>
+                  </a>
+                ))}
+                {tenders.length > 8 && (
+                  <a
+                    href="/tenders"
+                    className="text-[11px] text-primary hover:underline self-start"
+                  >
+                    Voir tous les AO
+                  </a>
+                )}
+              </div>
+            )}
+          </NeumoCard>
         </div>
       </div>
     </div>

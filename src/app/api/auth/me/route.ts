@@ -12,19 +12,45 @@ export async function GET() {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-            plan: true,
-            createdAt: true,
+    const isTransientDbError = (err: unknown) => {
+      const e = err as { code?: string; message?: string } | null;
+      const msg = String(e?.message ?? "");
+      return (
+        e?.code === "ECONNRESET" ||
+        /socket disconnected before secure TLS connection was established/i.test(msg) ||
+        /ECONNRESET/i.test(msg)
+      );
+    };
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const loadUser = async () =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              plan: true,
+              createdAt: true,
+            },
           },
         },
-      },
-    });
+      });
+
+    let user: Awaited<ReturnType<typeof loadUser>> | null = null;
+    try {
+      user = await loadUser();
+    } catch (err) {
+      if (!isTransientDbError(err)) throw err;
+      await sleep(200);
+      try {
+        user = await loadUser();
+      } catch (err2) {
+        if (!isTransientDbError(err2)) throw err2;
+        await sleep(500);
+        user = await loadUser();
+      }
+    }
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });

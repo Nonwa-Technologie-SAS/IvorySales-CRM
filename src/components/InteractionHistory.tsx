@@ -32,7 +32,10 @@ export interface Activity {
 }
 
 interface InteractionHistoryProps {
-  lead: Lead | null;
+  /** Prospect associé (optionnel si tenderId est fourni) */
+  lead?: Lead | null;
+  /** Appel d'offre associé (optionnel si lead est fourni) */
+  tenderId?: string;
   /** Liste d'activités contrôlée par le parent (ex: lead.activities). Si fournie, aucune requête GET /api/activities n'est faite. */
   activities?: Activity[];
   onActivityAdded?: (activity: Activity) => void;
@@ -42,22 +45,26 @@ interface InteractionHistoryProps {
   title?: string;
   /** Type initial sélectionné dans le formulaire (CALL, EMAIL, WHATSAPP, MEETING, NOTE) */
   initialType?: string;
+  /** Autorise l'ajout d'activité (true par défaut) */
+  canWrite?: boolean;
 }
 
 export default function InteractionHistory({
   lead,
+  tenderId,
   activities: activitiesProp,
   onActivityAdded,
   filterType,
   title,
   initialType,
+  canWrite = true,
 }: InteractionHistoryProps) {
   const [activities, setActivities] = useState<Activity[]>(activitiesProp ?? []);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState<string>(initialType || "NOTE");
   const [formContent, setFormContent] = useState("");
-  const [callDate, setCallDate] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
   const [formLoading, setFormLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
@@ -78,34 +85,54 @@ export default function InteractionHistory({
 
   // Mode non contrôlé : fallback sur l'API historique /api/activities
   useEffect(() => {
-    if (!lead?.id || activitiesProp) return;
+    if (activitiesProp) return;
+    const leadId = lead?.id;
+    if (!leadId && !tenderId) return;
     setLoading(true);
-    fetch(`/api/activities?leadId=${encodeURIComponent(lead.id)}`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setActivities(data))
+    const url = leadId
+      ? `/api/activities?leadId=${encodeURIComponent(leadId)}`
+      : `/api/tenders/${encodeURIComponent(tenderId!)}/activities?skip=0&take=100`;
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : leadId ? [] : { activities: [] }))
+      .then((data) => {
+        if (leadId) return setActivities(data as Activity[]);
+        const payload = data as { activities?: Activity[] };
+        setActivities(Array.isArray(payload.activities) ? payload.activities : []);
+      })
       .catch(() => setActivities([]))
       .finally(() => setLoading(false));
-  }, [lead?.id, activitiesProp]);
+  }, [lead?.id, tenderId, activitiesProp]);
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
-    if (!lead?.id || !formContent.trim()) return;
-    if (formType === "CALL" && !callDate) {
-      setError("Merci de renseigner la date de l'appel.");
+    const leadId = lead?.id;
+    if ((!leadId && !tenderId) || !formContent.trim()) return;
+    if (formType === "MEETING" && !scheduledDate) {
+      setError("Merci de renseigner la date du rendez-vous.");
       return;
     }
     setFormLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/activities", {
+      const url = leadId
+        ? "/api/activities"
+        : `/api/tenders/${encodeURIComponent(tenderId!)}/activities`;
+      const payload = leadId
+        ? {
+            leadId,
+            type: formType,
+            content: formContent.trim(),
+            date: scheduledDate || undefined,
+          }
+        : {
+            type: formType,
+            content: formContent.trim(),
+            date: scheduledDate || undefined,
+          };
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leadId: lead.id,
-          type: formType,
-          content: formContent.trim(),
-          date: formType === "CALL" && callDate ? callDate : undefined,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -118,7 +145,7 @@ export default function InteractionHistory({
       }
       onActivityAdded?.(created);
       setFormContent("");
-      setCallDate("");
+      setScheduledDate("");
       setShowForm(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");
@@ -127,7 +154,7 @@ export default function InteractionHistory({
     }
   };
 
-  if (!lead) return null;
+  if (!lead?.id && !tenderId) return null;
 
   const filteredActivities = filterType
     ? activities.filter((a) => (a.type in ACTIVITY_CONFIG ? a.type : "NOTE") === filterType)
@@ -146,7 +173,7 @@ export default function InteractionHistory({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold text-primary">{title ?? "Historique des Interactions"}</h3>
-        {!showForm && (
+        {canWrite && !showForm && (
           <button
             type="button"
             onClick={() => setShowForm(true)}
@@ -157,7 +184,7 @@ export default function InteractionHistory({
         )}
       </div>
 
-      {showForm && (
+      {canWrite && showForm && (
         <form
           onSubmit={handleAdd}
           className="p-3 rounded-xl bg-gray-50 border border-gray-100 flex flex-col gap-2"
@@ -189,13 +216,15 @@ export default function InteractionHistory({
             className="min-h-[60px] rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] bg-white resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
             required
           />
-          {formType === "CALL" && (
+          {(formType === "CALL" || formType === "EMAIL" || formType === "MEETING") && (
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] text-gray-600">Date & heure de l'appel</span>
+              <span className="text-[11px] text-gray-600">
+                Date & heure {formType === "CALL" ? "de l'appel" : formType === "EMAIL" ? "de l'email" : "du rendez-vous"}
+              </span>
               <input
                 type="datetime-local"
-                value={callDate}
-                onChange={(e) => setCallDate(e.target.value)}
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
                 className="h-8 rounded-lg border border-gray-200 px-2.5 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40"
               />
             </div>
@@ -204,7 +233,7 @@ export default function InteractionHistory({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => { setShowForm(false); setFormContent(""); setError(null); }}
+              onClick={() => { setShowForm(false); setFormContent(""); setScheduledDate(""); setError(null); }}
               className="px-2 py-1 rounded-lg text-[10px] bg-gray-200 text-gray-600"
             >
               Annuler

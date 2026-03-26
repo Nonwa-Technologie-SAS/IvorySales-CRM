@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { FrontendRole } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { BarChart3, BookOpen, Building2, CalendarDays, LayoutGrid, Package, Settings, UserPlus, Users } from 'lucide-react';
+import { BarChart3, BookOpen, Building2, CalendarDays, FileText, LayoutGrid, Package, Settings, UserPlus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -21,6 +21,7 @@ export const sidebarItems: SidebarItemDef[] = [
   { icon: LayoutGrid, label: 'Dashboard', href: '/' },
   { icon: CalendarDays, label: 'Agenda', href: '/agenda' },
   { icon: UserPlus, label: 'Leads', href: '/leads' },
+  { icon: FileText, label: "Appels d’offre", href: '/tenders' },
   { icon: BarChart3, label: 'Statistiques', href: '/stats', allowedRoles: ['admin', 'manager'] },
   { icon: Package, label: 'Produits et services', href: '/products-services', allowedRoles: ['admin', 'manager'] },
   { icon: Building2, label: 'Clients', href: '/clients' },

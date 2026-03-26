@@ -18,6 +18,7 @@ model Company {
   leads      Lead[]
   deals      Deal[]
   clients    Client[]
+  tenders    Tender[]
   products   Product[]
   services   Service[]
   salesGoals SalesGoal[]
@@ -72,12 +73,79 @@ model User {
 
   activities       Activity[]
   clientsConverted Client[]
+  tendersCreated   Tender[]           @relation("TenderCreatedBy")
+  tendersApporteur Tender[]           @relation("TenderApporteur")
+  tenderAssignments TenderAssignment[]
+  tenderActivities TenderActivity[]
+  tenderAttachmentsUploaded TenderAttachment[] @relation("TenderAttachmentUploadedBy")
   /// Objectifs commerciaux assignés à cet utilisateur
   salesGoals       SalesGoal[]
   /// Objectifs que cet utilisateur a définis (manager/admin)
   goalsSetBy       SalesGoal[] @relation("SalesGoalSetBy")
   /// Ventes réalisées par ce commercial
   sales            Sale[]
+}
+
+model Tender {
+  id          String       @id @default(cuid())
+  title       String
+  reference   String?
+  description String?
+  status      TenderStatus @default(DRAFT)
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User         @relation("TenderCreatedBy", fields: [createdById], references: [id])
+  apporteurId String?
+  apporteur   User?        @relation("TenderApporteur", fields: [apporteurId], references: [id])
+  dueDate     DateTime?
+  budget      Float?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
+
+  assignments TenderAssignment[]
+  activities  TenderActivity[]
+  attachments TenderAttachment[]
+}
+
+model TenderAssignment {
+  id        String   @id @default(cuid())
+  tender    Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  tenderId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([tenderId, userId])
+}
+
+model TenderActivity {
+  id        String             @id @default(cuid())
+  tenderId  String
+  tender    Tender             @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      TenderActivityType
+  content   String
+  date      DateTime           @default(now())
+  createdAt DateTime           @default(now())
+}
+
+/// Pièce jointe d'un appel d'offre (fichier uploadé)
+model TenderAttachment {
+  id           String   @id @default(cuid())
+  tender       Tender   @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  tenderId     String
+  fileName     String
+  /// Extension du fichier (PDF, JPG, XLSX, ...)
+  fileType     String
+  /// Taille en octets
+  fileSize     Int
+  /// Chemin de stockage public (ex: /uploads/tenders/{tenderId}/{file})
+  storagePath  String
+  uploadedById String
+  uploadedBy   User     @relation("TenderAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
 }
 
 model Lead {
@@ -303,6 +371,23 @@ enum ActivityType {
   WHATSAPP
   MEETING
   NOTE
+}
+
+enum TenderStatus {
+  DRAFT
+  PUBLISHED
+  IN_PROGRESS
+  SUBMITTED
+  WON
+  LOST
+  CANCELLED
+}
+
+enum TenderActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
 }
 
 /// Statut d'une tâche / événement dans l'agenda du prospect

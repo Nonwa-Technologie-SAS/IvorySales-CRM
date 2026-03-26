@@ -21,10 +21,41 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const userId = cookieStore.get("auth_session")?.value;
   if (!userId) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true, companyId: true },
-  });
+  const isTransientDbError = (err: unknown) => {
+    const e = err as { code?: string; message?: string } | null;
+    const msg = String(e?.message ?? "");
+    return (
+      e?.code === "ECONNRESET" ||
+      /socket disconnected before secure TLS connection was established/i.test(msg) ||
+      /ECONNRESET/i.test(msg)
+    );
+  };
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const loadUser = async () =>
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, companyId: true },
+    });
+
+  let user:
+    | { id: string; email: string; name: string; role: string; companyId: string | null }
+    | null = null;
+  try {
+    user = await loadUser();
+  } catch (err) {
+    if (!isTransientDbError(err)) return null;
+    // Retry court (évite de casser tout le CRM sur une micro-coupure réseau)
+    await sleep(200);
+    try {
+      user = await loadUser();
+    } catch (err2) {
+      if (!isTransientDbError(err2)) return null;
+      await sleep(500);
+      user = await loadUser().catch(() => null);
+    }
+  }
   if (!user) return null;
 
   return {
