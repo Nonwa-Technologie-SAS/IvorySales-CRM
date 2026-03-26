@@ -32,6 +32,8 @@ model Product {
   companyId String
   createdAt DateTime @default(now())
   leads     Lead[]   @relation("LeadProducts")
+  /// Intérêts exprimés par les leads pour ce produit, avec valeur estimative
+  leadInterests LeadProductInterest[]
   /// Intérêts exprimés par les clients pour ce produit, avec valeur estimative
   clientInterests ClientProductInterest[]
   /// Lignes de vente associées à ce produit
@@ -45,6 +47,8 @@ model Service {
   companyId String
   createdAt DateTime @default(now())
   leads     Lead[]   @relation("LeadServices")
+  /// Intérêts exprimés par les leads pour ce service, avec valeur estimative
+  leadInterests LeadServiceInterest[]
   /// Intérêts exprimés par les clients pour ce service, avec valeur estimative
   clientInterests ClientServiceInterest[]
   /// Lignes de vente associées à ce service
@@ -104,10 +108,40 @@ model Lead {
   products   Product[] @relation("LeadProducts")
   /// Services pour lesquels le prospect a exprimé un intérêt
   services   Service[] @relation("LeadServices")
+  /// Intérêts produits avec valeur estimative (pivot)
+  productInterests LeadProductInterest[]
+  /// Intérêts services avec valeur estimative (pivot)
+  serviceInterests LeadServiceInterest[]
   /// Pièces jointes (fichiers) associées au prospect
   attachments LeadAttachment[]
   /// Événements / tâches de prospection enregistrés dans l'agenda
   agendaItems AgendaItem[]
+}
+
+/// Lien entre un lead et un produit, avec une valeur estimative associée
+model LeadProductInterest {
+  id             String   @id @default(cuid())
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId         String
+  product        Product  @relation(fields: [productId], references: [id])
+  productId      String
+  estimatedValue Float    @default(0)
+  createdAt      DateTime @default(now())
+
+  @@unique([leadId, productId])
+}
+
+/// Lien entre un lead et un service, avec une valeur estimative associée
+model LeadServiceInterest {
+  id             String   @id @default(cuid())
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId         String
+  service        Service  @relation(fields: [serviceId], references: [id])
+  serviceId      String
+  estimatedValue Float    @default(0)
+  createdAt      DateTime @default(now())
+
+  @@unique([leadId, serviceId])
 }
 
 /// Pièce jointe d'un prospect (fichier uploadé)

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -48,20 +49,21 @@ function toFirstLast(
 
 export async function POST(req: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    if (!user.companyId) {
+      return NextResponse.json(
+        { error: "Aucune société associée à l'utilisateur" },
+        { status: 400 },
+      );
+    }
+
     const json = await req.json();
     console.log('🚀 ~ POST ~ json:', json);
     // 1) Validation du corps JSON (provenant du parsing Excel côté client)
     const { leads: rows } = importBodySchema.parse(json);
-
-    // 2) On récupère (ou crée) une company par défaut au cas où
-    const defaultCompany = await prisma.company.findFirst();
-    const companyIdFallback =
-      defaultCompany?.id ??
-      (
-        await prisma.company.create({
-          data: { name: 'Entreprise démo', plan: 'free' },
-        })
-      ).id;
 
     const created: { id: string; firstName: string; lastName: string }[] = [];
     const errors: { row: number; message: string }[] = [];
@@ -70,19 +72,8 @@ export async function POST(req: Request) {
     for (let i = 0; i < rows.length; i++) {
       try {
         const row = rows[i];
-        // 3.a) Normalisation du nom de société
+        // 3.a) Normalisation du nom de société (info métier du lead)
         const companyName = (row.companyName || '').trim() || 'Sans nom';
-        // 3.b) On cherche si la company existe déjà (comparaison insensible à la casse)
-        let company = await prisma.company.findFirst({
-          where: { name: { equals: companyName, mode: 'insensitive' } },
-        });
-        if (!company) {
-          // Si elle n’existe pas encore, on la crée
-          company = await prisma.company.create({
-            data: { name: companyName, plan: 'free' },
-          });
-        }
-        const companyId = company.id;
 
         // 3.c) On déduit firstName / lastName :
         //  - en priorité à partir des colonnes "Nom" / "Prénoms" de l'Excel
@@ -129,7 +120,8 @@ export async function POST(req: Request) {
             civility: row.civility?.trim() || null,
             status: 'NEW',
             assignedTo: row.receivedBy?.trim() || null,
-            companyId,
+            // L'import est toujours rattaché à la société de l'utilisateur connecté.
+            companyId: user.companyId,
           },
         });
         created.push({

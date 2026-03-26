@@ -792,16 +792,17 @@ function LeadsPageInner() {
         )}
 
         {viewMode === "kanban" && (
-          <div className="flex gap-4 overflow-x-auto pb-2">
+          <div className="flex gap-4 overflow-x-auto pb-3 px-1 snap-x snap-mandatory">
             {STATUS_ORDER.map((status) => (
-              <PipelineColumn
-                key={status}
-                title={STATUS_LABELS[status] ?? status}
-                status={status}
-                leads={(grouped[status] ?? []) as unknown as Lead[]}
-                onDrop={handleLeadDrop}
-                onLeadClick={(l) => router.push(`/leads/${l.id}`)}
-              />
+              <div key={status} className="snap-start">
+                <PipelineColumn
+                  title={STATUS_LABELS[status] ?? status}
+                  status={status}
+                  leads={(grouped[status] ?? []) as unknown as Lead[]}
+                  onDrop={handleLeadDrop}
+                  onLeadClick={(l) => router.push(`/leads/${l.id}`)}
+                />
+              </div>
             ))}
           </div>
         )}

@@ -28,6 +28,18 @@ export async function GET(
         services: {
           select: { id: true, name: true },
         },
+        productInterests: {
+          select: {
+            estimatedValue: true,
+            product: { select: { id: true, name: true } },
+          },
+        },
+        serviceInterests: {
+          select: {
+            estimatedValue: true,
+            service: { select: { id: true, name: true } },
+          },
+        },
       },
     });
 

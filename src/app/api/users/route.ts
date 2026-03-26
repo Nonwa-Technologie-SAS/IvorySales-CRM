@@ -23,8 +23,18 @@ const updateUserSchema = z.object({
 export async function GET() {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
+  const { user: currentUser } = auth as {
+    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+  };
+  if (!currentUser.companyId) {
+    return NextResponse.json(
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
+    );
+  }
   try {
     const users = await prisma.user.findMany({
+      where: { companyId: currentUser.companyId },
       include: { company: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -42,9 +52,29 @@ export async function GET() {
 export async function PATCH(req: Request) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
+  const { user: currentUser } = auth as {
+    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+  };
+  if (!currentUser.companyId) {
+    return NextResponse.json(
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
+    );
+  }
   try {
     const json = await req.json();
     const body = updateUserSchema.parse(json);
+
+    const target = await prisma.user.findUnique({
+      where: { id: body.id },
+      select: { id: true, companyId: true },
+    });
+    if (!target || target.companyId !== currentUser.companyId) {
+      return NextResponse.json(
+        { error: 'Utilisateur non trouvé ou autre entreprise' },
+        { status: 403 },
+      );
+    }
 
     const user = await prisma.user.update({
       where: { id: body.id },
@@ -69,12 +99,32 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
+  const { user: currentUser } = auth as {
+    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+  };
+  if (!currentUser.companyId) {
+    return NextResponse.json(
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
+    );
+  }
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
 
     if (!id) {
       return NextResponse.json({ error: 'Missing user id' }, { status: 400 });
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, companyId: true },
+    });
+    if (!target || target.companyId !== currentUser.companyId) {
+      return NextResponse.json(
+        { error: 'Utilisateur non trouvé ou autre entreprise' },
+        { status: 403 },
+      );
     }
 
     await prisma.user.delete({ where: { id } });
@@ -93,20 +143,25 @@ export async function DELETE(req: Request) {
 export async function POST(req: Request) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
+  const { user: currentUser } = auth as {
+    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+  };
+  if (!currentUser.companyId) {
+    return NextResponse.json(
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
+    );
+  }
   try {
     const json = await req.json();
     const body = createUserSchema.parse(json);
 
-    // Récupère ou crée une entreprise par défaut si aucun companyId n'est fourni
-    let companyId = body.companyId;
-    if (!companyId) {
-      const existing = await prisma.company.findFirst();
-      const company =
-        existing ??
-        (await prisma.company.create({
-          data: { name: 'Entreprise démo', plan: 'free' },
-        }));
-      companyId = company.id;
+    let companyId = currentUser.companyId;
+    if (body.companyId && body.companyId !== currentUser.companyId) {
+      return NextResponse.json(
+        { error: 'Impossible de créer un utilisateur dans une autre entreprise' },
+        { status: 403 },
+      );
     }
 
     const user = await prisma.user.create({

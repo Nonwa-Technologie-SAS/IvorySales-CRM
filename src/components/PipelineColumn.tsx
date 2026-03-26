@@ -39,7 +39,7 @@ export default function PipelineColumn({
 
   return (
     <motion.div
-      className="flex-1 bg-bgGray rounded-2xl p-4 shadow-neu min-w-[260px] flex flex-col gap-3"
+      className="flex-1 bg-bgGray rounded-2xl p-3 md:p-4 shadow-neu min-w-[300px] md:min-w-[320px] flex flex-col gap-3 border border-white/70"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
@@ -47,11 +47,13 @@ export default function PipelineColumn({
       onDragLeave={onDrop ? handleDragLeave : undefined}
       onDrop={onDrop ? handleDrop : undefined}
     >
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-sm md:text-md font-semibold text-primary">{title}</h2>
-        <span className="text-[10px] md:text-xs text-gray-400">{leads.length} leads</span>
+      <div className="flex items-center justify-between gap-2 sticky top-0 z-10 bg-bgGray/95 backdrop-blur-xs rounded-xl px-1 py-1">
+        <h2 className="text-sm md:text-base font-semibold text-primary truncate">{title}</h2>
+        <span className="inline-flex items-center rounded-full bg-white border border-gray-200 px-2 py-0.5 text-[10px] md:text-xs text-gray-600 shrink-0">
+          {leads.length} leads
+        </span>
       </div>
-      <div className="space-y-3 overflow-y-auto max-h-[420px] pr-1">
+      <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-320px)] pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
         {leads.map((lead) => (
           <LeadCard
             key={lead.id}

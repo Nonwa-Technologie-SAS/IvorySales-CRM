@@ -280,6 +280,10 @@ function UsersPageInner() {
                                 className='text-rose-600'
                                 onSelect={async (e) => {
                                   e.preventDefault();
+                                  const confirmed = window.confirm(
+                                    `Supprimer l'utilisateur ${user.name} ? Cette action est irréversible.`,
+                                  );
+                                  if (!confirmed) return;
                                   try {
                                     await fetch(`/api/users?id=${user.id}`, {
                                       method: 'DELETE',

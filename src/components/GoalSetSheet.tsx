@@ -85,7 +85,18 @@ export function GoalSetSheet({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || "Impossible d'enregistrer l'objectif");
+        const apiError =
+          typeof data?.error === "string" ? data.error : "";
+        if (
+          res.status === 403 &&
+          (apiError.includes("autre entreprise") ||
+            apiError.includes("Utilisateur non trouvé"))
+        ) {
+          throw new Error(
+            "Ce commercial n'appartient pas à votre entreprise. Rechargez la page Utilisateurs puis réessayez.",
+          );
+        }
+        throw new Error(apiError || "Impossible d'enregistrer l'objectif");
       }
 
       onOpenChange(false);
@@ -108,6 +119,10 @@ export function GoalSetSheet({
             <SheetDescription>
               Objectif pour {user.name} — conversions et CA cible.
             </SheetDescription>
+            <p className="text-[11px] text-gray-500">
+              Seuls les commerciaux de votre entreprise peuvent recevoir un
+              objectif.
+            </p>
           </div>
           <SheetClose className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 text-xs flex items-center justify-center">
             ✕

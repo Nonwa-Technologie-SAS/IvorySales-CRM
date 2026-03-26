@@ -53,6 +53,22 @@ interface RecentLead {
   createdAt?: string;
 }
 
+const LEAD_STATUS_LABELS: Record<string, string> = {
+  NEW: "Nouveau",
+  CONTACTED: "Contacté",
+  QUALIFIED: "Qualifié",
+  LOST: "Perdu",
+  CONVERTED: "Converti",
+};
+
+const LEAD_STATUS_BADGE_STYLES: Record<string, string> = {
+  NEW: "bg-blue-100 text-blue-700 border border-blue-200",
+  CONTACTED: "bg-amber-100 text-amber-800 border border-amber-200",
+  QUALIFIED: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  LOST: "bg-rose-100 text-rose-700 border border-rose-200",
+  CONVERTED: "bg-teal-100 text-teal-700 border border-teal-200",
+};
+
 /** Événement émis après une conversion lead→client pour rafraîchir les objectifs */
 export const GOALS_INVALIDATE_EVENT = "crm:goals-invalidate";
 
@@ -192,6 +208,97 @@ export default function DashboardPage() {
           </NeumoCard>
         </section>
 
+        <section>
+          <NeumoCard className="p-4 bg-linear-to-br from-violet-50 via-white to-primary/10 border border-violet-100 shadow-neu-soft flex flex-col gap-3">
+            <p className="text-xs font-semibold text-primary flex items-center gap-1">
+              <Target className="w-3.5 h-3.5" />
+              {isManagerOrAdmin ? "Objectifs de l'équipe" : "Mon objectif"}
+            </p>
+            {goalsLoading ? (
+              <p className="text-[11px] text-gray-500">Chargement…</p>
+            ) : !currentGoal ? (
+              <p className="text-[11px] text-gray-500">
+                Aucun objectif courant pour cette période.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3 text-[11px]">
+                <p className="text-gray-600 font-medium">
+                  Période : {currentGoal.periodLabel}
+                </p>
+                {(() => {
+                  const realizedRevenue = Number(
+                    currentGoal.realizedRevenue ?? 0,
+                  );
+                  const targetRevenue = Number(currentGoal.targetRevenue ?? 0);
+                  return (
+                    <>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Conversions</span>
+                          <span className="font-semibold text-primary">
+                            {currentGoal.realizedConversions} /{" "}
+                            {currentGoal.targetConversions}
+                          </span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{
+                              width: `${
+                                currentGoal.targetConversions > 0
+                                  ? Math.min(
+                                      100,
+                                      (currentGoal.realizedConversions /
+                                        currentGoal.targetConversions) *
+                                        100,
+                                    )
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">CA</span>
+                          <span className="font-semibold text-primary">
+                            {realizedRevenue.toLocaleString("fr-FR", {
+                              style: "currency",
+                              currency: "XOF",
+                              maximumFractionDigits: 0,
+                            })}{" "}
+                            /{" "}
+                            {targetRevenue.toLocaleString("fr-FR", {
+                              style: "currency",
+                              currency: "XOF",
+                              maximumFractionDigits: 0,
+                            })}
+                          </span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{
+                              width: `${
+                                targetRevenue > 0
+                                  ? Math.min(
+                                      100,
+                                      (realizedRevenue / targetRevenue) * 100,
+                                    )
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </NeumoCard>
+        </section>
+
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <NeumoCard className="p-4 bg-white border border-gray-100 shadow-neu-soft flex flex-col gap-3">
             <div className="flex items-center justify-between">
@@ -218,8 +325,8 @@ export default function DashboardPage() {
           </NeumoCard>
         </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-          <NeumoCard className="p-4 bg-white border border-gray-100 shadow-neu-soft lg:col-span-2">
+        <section className="grid grid-cols-1 gap-4 items-start">
+          <NeumoCard className="p-4 bg-white border border-gray-100 shadow-neu-soft">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-primary">
                 Derniers leads créés
@@ -266,7 +373,14 @@ export default function DashboardPage() {
                           {lead.email || lead.phone || "-"}
                         </TableCell>
                         <TableCell className="text-gray-600">
-                          {lead.status}
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                              LEAD_STATUS_BADGE_STYLES[lead.status] ??
+                              "bg-gray-100 text-gray-600 border border-gray-200"
+                            }`}
+                          >
+                            {LEAD_STATUS_LABELS[lead.status] ?? lead.status}
+                          </span>
                         </TableCell>
                         <TableCell className="text-gray-500 text-[11px]">
                           {lead.createdAt
@@ -283,94 +397,6 @@ export default function DashboardPage() {
             </div>
           </NeumoCard>
 
-          <NeumoCard className="p-4 bg-linear-to-br from-violet-50 via-white to-primary/10 border border-violet-100 shadow-neu-soft flex flex-col gap-3">
-            <p className="text-xs font-semibold text-primary flex items-center gap-1">
-              <Target className="w-3.5 h-3.5" />
-              {isManagerOrAdmin ? "Objectifs de l'équipe" : "Mon objectif"}
-            </p>
-            {goalsLoading ? (
-              <p className="text-[11px] text-gray-500">Chargement…</p>
-            ) : !currentGoal ? (
-              <p className="text-[11px] text-gray-500">
-                Aucun objectif courant pour cette période.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-3 text-[11px]">
-                <p className="text-gray-600 font-medium">
-                  Période : {currentGoal.periodLabel}
-                </p>
-                {(() => {
-                  const realizedRevenue = Number(
-                    currentGoal.realizedRevenue ?? 0,
-                  );
-                  const targetRevenue = Number(currentGoal.targetRevenue ?? 0);
-                  return (
-                    <>
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Conversions</span>
-                    <span className="font-semibold text-primary">
-                      {currentGoal.realizedConversions} /{" "}
-                      {currentGoal.targetConversions}
-                    </span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{
-                        width: `${
-                          currentGoal.targetConversions > 0
-                            ? Math.min(
-                                100,
-                                (currentGoal.realizedConversions /
-                                  currentGoal.targetConversions) *
-                                  100,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">CA</span>
-                    <span className="font-semibold text-primary">
-                      {realizedRevenue.toLocaleString("fr-FR", {
-                        style: "currency",
-                        currency: "XOF",
-                        maximumFractionDigits: 0,
-                      })}{" "}
-                      /{" "}
-                      {targetRevenue.toLocaleString("fr-FR", {
-                        style: "currency",
-                        currency: "XOF",
-                        maximumFractionDigits: 0,
-                      })}
-                    </span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{
-                        width: `${
-                          targetRevenue > 0
-                            ? Math.min(
-                                100,
-                                (realizedRevenue / targetRevenue) * 100,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-          </NeumoCard>
         </section>
 
         {isManagerOrAdmin && (

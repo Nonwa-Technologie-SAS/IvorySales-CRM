@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -46,6 +47,17 @@ const updateLeadSchema = z.object({
 
 export async function GET(req: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    if (!user.companyId) {
+      return NextResponse.json(
+        { error: "Aucune société associée à l'utilisateur" },
+        { status: 400 },
+      );
+    }
+
     const url = new URL(req.url);
     const statusParam = url.searchParams.get('status');
     const sourceParam = url.searchParams.get('source');
@@ -56,7 +68,7 @@ export async function GET(req: Request) {
     const takeParam = url.searchParams.get('take');
     const skipParam = url.searchParams.get('skip');
 
-    const where: any = {};
+    const where: any = { companyId: user.companyId };
     const andConditions: any[] = [];
 
     if (statusParam) {
@@ -150,20 +162,19 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    if (!user.companyId) {
+      return NextResponse.json(
+        { error: "Aucune société associée à l'utilisateur" },
+        { status: 400 },
+      );
+    }
+
     const json = await req.json();
     const body = createLeadSchema.parse(json);
-
-    // Comme pour les users, on rattache le lead à une company par défaut si besoin
-    let companyId = body.companyId;
-    if (!companyId) {
-      const existing = await prisma.company.findFirst();
-      const company =
-        existing ??
-        (await prisma.company.create({
-          data: { name: 'Entreprise démo', plan: 'free' },
-        }));
-      companyId = company.id;
-    }
 
     const lead = await prisma.lead.create({
       data: {
@@ -189,7 +200,8 @@ export async function POST(req: Request) {
               connect: body.serviceIds.map((id) => ({ id })),
             }
           : undefined,
-        companyId,
+        // On rattache toujours le lead à la société de l'utilisateur connecté.
+        companyId: user.companyId,
       },
     });
 
@@ -224,8 +236,30 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    if (!user.companyId) {
+      return NextResponse.json(
+        { error: "Aucune société associée à l'utilisateur" },
+        { status: 400 },
+      );
+    }
+
     const json = await req.json();
     const body = updateLeadSchema.parse(json);
+
+    const existing = await prisma.lead.findFirst({
+      where: { id: body.id, companyId: user.companyId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Lead introuvable dans votre société' },
+        { status: 404 },
+      );
+    }
 
     const lead = await prisma.lead.update({
       where: { id: body.id },
@@ -268,11 +302,33 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    }
+    if (!user.companyId) {
+      return NextResponse.json(
+        { error: "Aucune société associée à l'utilisateur" },
+        { status: 400 },
+      );
+    }
+
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
 
     if (!id) {
       return NextResponse.json({ error: 'Missing lead id' }, { status: 400 });
+    }
+
+    const existing = await prisma.lead.findFirst({
+      where: { id, companyId: user.companyId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Lead introuvable dans votre société' },
+        { status: 404 },
+      );
     }
 
     await prisma.lead.delete({ where: { id } });

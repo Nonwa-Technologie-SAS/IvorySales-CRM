@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
+import { CONVERT_REQUIRES_PIVOT_INTERESTS_MESSAGE } from "@/lib/lead-conversion";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -48,8 +49,8 @@ export async function POST(req: Request) {
       where: { id: leadId },
       include: {
         company: true,
-        products: true,
-        services: true,
+        productInterests: { select: { productId: true, estimatedValue: true } },
+        serviceInterests: { select: { serviceId: true, estimatedValue: true } },
       },
     });
 
@@ -57,6 +58,16 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Lead introuvable" },
         { status: 404 },
+      );
+    }
+
+    if (
+      lead.productInterests.length === 0 &&
+      lead.serviceInterests.length === 0
+    ) {
+      return NextResponse.json(
+        { error: CONVERT_REQUIRES_PIVOT_INTERESTS_MESSAGE },
+        { status: 400 },
       );
     }
 
@@ -80,28 +91,38 @@ export async function POST(req: Request) {
       });
 
       // Si des produits / services étaient déjà renseignés sur le lead,
-      // on les initialise comme intérêts du client avec une valeur estimative à 0.
+      // on les initialise comme intérêts du client avec une valeur estimative issue du lead.
       const hasClientProductInterest =
         (tx as any).clientProductInterest !== undefined;
       const hasClientServiceInterest =
         (tx as any).clientServiceInterest !== undefined;
 
-      if (hasClientProductInterest && lead.products.length > 0) {
+      const productInterestsSource = lead.productInterests.map((i) => ({
+        productId: i.productId,
+        estimatedValue: i.estimatedValue,
+      }));
+
+      const serviceInterestsSource = lead.serviceInterests.map((i) => ({
+        serviceId: i.serviceId,
+        estimatedValue: i.estimatedValue,
+      }));
+
+      if (hasClientProductInterest && productInterestsSource.length > 0) {
         await (tx as any).clientProductInterest.createMany({
-          data: lead.products.map((product) => ({
+          data: productInterestsSource.map((product) => ({
             clientId: client.id,
-            productId: product.id,
-            estimatedValue: 0,
+            productId: product.productId,
+            estimatedValue: product.estimatedValue,
           })),
         });
       }
 
-      if (hasClientServiceInterest && lead.services.length > 0) {
+      if (hasClientServiceInterest && serviceInterestsSource.length > 0) {
         await (tx as any).clientServiceInterest.createMany({
-          data: lead.services.map((service) => ({
+          data: serviceInterestsSource.map((service) => ({
             clientId: client.id,
-            serviceId: service.id,
-            estimatedValue: 0,
+            serviceId: service.serviceId,
+            estimatedValue: service.estimatedValue,
           })),
         });
       }

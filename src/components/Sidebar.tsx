@@ -3,6 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import type { FrontendRole } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { BarChart3, BookOpen, Building2, CalendarDays, LayoutGrid, Package, Settings, UserPlus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -84,10 +85,19 @@ export default function Sidebar() {
           <button
             type='button'
             onClick={() => handleNavigate('/')}
-            className='h-9 px-3 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-500 shadow-neu flex items-center justify-center text-white text-[11px] font-semibold tracking-wide'
+            className={`h-9 rounded-2xl shadow-neu flex items-center justify-center gap-2 bg-white border border-sky-200/80 text-sky-900 text-[11px] font-semibold tracking-wide ${
+              expanded ? 'px-2.5' : 'px-0 w-9'
+            }`}
             aria-label='KpiTracker'
           >
-            {expanded ? 'KpiTracker' : 'KT'}
+            <Image
+              src='/kpitracker-mark.svg'
+              alt=''
+              width={28}
+              height={28}
+              className='h-7 w-7 shrink-0'
+            />
+            {expanded && <span className='truncate'>KpiTracker</span>}
           </button>
           <button
             type='button'

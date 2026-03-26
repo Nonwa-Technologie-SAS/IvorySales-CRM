@@ -9,15 +9,20 @@ import InteractionHistory, {
 import LeadAttachmentsBlock from '@/components/lead-attachments/LeadAttachmentsBlock';
 import type { Lead } from '@/components/LeadCard';
 import LeadEditSheet from '@/components/LeadEditSheet';
+import LeadInterestsEstimatorCard, {
+  type InterestItemLite,
+  type InterestsPayloadItem,
+} from '@/components/LeadInterestsEstimatorCard';
 import MeetingsTabContent from '@/components/MeetingsTabContent';
 import Navbar from '@/components/Navbar';
 import NeumoCard from '@/components/NeumoCard';
 import Sidebar from '@/components/Sidebar';
 import SkeletonLoader from '@/components/SkeletonLoader';
 import { ArrowLeft, Building2, Check, ChevronDown, Search } from 'lucide-react';
+import { CONVERT_REQUIRES_PIVOT_INTERESTS_MESSAGE } from '@/lib/lead-conversion';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Nouveau lead',
@@ -70,13 +75,14 @@ interface LeadDetail {
   activities: Activity[];
   products?: { id: string; name: string }[];
   services?: { id: string; name: string }[];
+  productInterests?: { product: { id: string; name: string }; estimatedValue: number }[];
+  serviceInterests?: { service: { id: string; name: string }; estimatedValue: number }[];
   totalActivities?: number;
   hasMoreActivities?: boolean;
 }
 
 export default function LeadDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
   const [lead, setLead] = useState<LeadDetail | null>(null);
@@ -92,6 +98,10 @@ export default function LeadDetailPage() {
   const [converting, setConverting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const [allProducts, setAllProducts] = useState<InterestItemLite[]>([]);
+  const [allServices, setAllServices] = useState<InterestItemLite[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+
   useEffect(() => {
     if (!id) return;
     fetch(`/api/leads/${id}`)
@@ -100,6 +110,103 @@ export default function LeadDetailPage() {
       .catch(() => setLead(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setCatalogLoading(true);
+        const [pRes, sRes] = await Promise.all([
+          fetch('/api/products'),
+          fetch('/api/services'),
+        ]);
+        if (!pRes.ok || !sRes.ok) return;
+        const [pJson, sJson] = await Promise.all([pRes.json(), sRes.json()]);
+        if (cancelled) return;
+        const products: InterestItemLite[] = Array.isArray(pJson)
+          ? (pJson as unknown[])
+              .map((p) => {
+                if (!p || typeof p !== 'object') return null;
+                const obj = p as Record<string, unknown>;
+                const id = typeof obj.id === 'string' ? obj.id : String(obj.id ?? '');
+                const name =
+                  typeof obj.name === 'string' ? obj.name : String(obj.name ?? '');
+                return { id, name } satisfies InterestItemLite;
+              })
+              .filter((p): p is InterestItemLite => !!p && !!p.id && !!p.name)
+          : [];
+        const services: InterestItemLite[] = Array.isArray(sJson)
+          ? (sJson as unknown[])
+              .map((s) => {
+                if (!s || typeof s !== 'object') return null;
+                const obj = s as Record<string, unknown>;
+                const id = typeof obj.id === 'string' ? obj.id : String(obj.id ?? '');
+                const name =
+                  typeof obj.name === 'string' ? obj.name : String(obj.name ?? '');
+                return { id, name } satisfies InterestItemLite;
+              })
+              .filter((s): s is InterestItemLite => !!s && !!s.id && !!s.name)
+          : [];
+        setAllProducts(products);
+        setAllServices(services);
+      } finally {
+        if (!cancelled) setCatalogLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const savedInterests = useMemo(() => {
+    if (!lead) {
+      return {
+        products: {} as Record<string, number>,
+        services: {} as Record<string, number>,
+      };
+    }
+    const productFromPivot =
+      lead.productInterests && lead.productInterests.length > 0
+        ? Object.fromEntries(
+            lead.productInterests.map((i) => [i.product.id, i.estimatedValue]),
+          )
+        : {};
+    const serviceFromPivot =
+      lead.serviceInterests && lead.serviceInterests.length > 0
+        ? Object.fromEntries(
+            lead.serviceInterests.map((i) => [i.service.id, i.estimatedValue]),
+          )
+        : {};
+
+    const productFallback =
+      Object.keys(productFromPivot).length > 0
+        ? {}
+        : Object.fromEntries((lead.products ?? []).map((p) => [p.id, 0]));
+
+    const serviceFallback =
+      Object.keys(serviceFromPivot).length > 0
+        ? {}
+        : Object.fromEntries((lead.services ?? []).map((s) => [s.id, 0]));
+
+    return {
+      products: { ...productFallback, ...productFromPivot } as Record<
+        string,
+        number
+      >,
+      services: { ...serviceFallback, ...serviceFromPivot } as Record<
+        string,
+        number
+      >,
+    };
+  }, [lead]);
+
+  const hasPivotInterests = useMemo(() => {
+    if (!lead) return false;
+    return (
+      (lead.productInterests?.length ?? 0) > 0 ||
+      (lead.serviceInterests?.length ?? 0) > 0
+    );
+  }, [lead]);
 
   if (loading) {
     return (
@@ -429,13 +536,21 @@ export default function LeadDetailPage() {
                 ) : (
                   <button
                     type='button'
-                    disabled={converting}
+                    disabled={converting || !hasPivotInterests}
                     onClick={async () => {
                       setConvertMessage(null);
                       if (lead.status === 'CONVERTED') {
                         setConvertMessage({
                           type: 'error',
                           text: 'Ce prospect est déjà enregistré comme client.',
+                        });
+                        setTimeout(() => setConvertMessage(null), 5000);
+                        return;
+                      }
+                      if (!hasPivotInterests) {
+                        setConvertMessage({
+                          type: 'error',
+                          text: CONVERT_REQUIRES_PIVOT_INTERESTS_MESSAGE,
                         });
                         setTimeout(() => setConvertMessage(null), 5000);
                         return;
@@ -493,6 +608,20 @@ export default function LeadDetailPage() {
                   >
                     {converting ? 'Conversion...' : 'Convertir en client'}
                   </button>
+                )}
+                {!hasPivotInterests && lead.status !== 'CONVERTED' && (
+                  <p className='text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl'>
+                    La conversion est impossible tant qu&apos;aucun intérêt n&apos;est
+                    enregistré via le bloc{' '}
+                    <a
+                      href='#lead-interests-estimation'
+                      className='font-medium underline underline-offset-2 hover:text-amber-900'
+                    >
+                      Intérêts & estimation
+                    </a>
+                    {' '}
+                    (au moins un produit ou un service avec montant, puis Enregistrer).
+                  </p>
                 )}
                 {convertMessage && (
                   <p
@@ -598,6 +727,54 @@ export default function LeadDetailPage() {
                 </div>
               </div>
             </NeumoCard>
+
+            <div id='lead-interests-estimation'>
+            <LeadInterestsEstimatorCard
+              key={`${lead.id}:${JSON.stringify(savedInterests)}`}
+              products={allProducts}
+              services={allServices}
+              initialSaved={savedInterests}
+              disabled={catalogLoading || lead.status === 'CONVERTED'}
+              onSave={async (items: InterestsPayloadItem[]) => {
+                try {
+                  const res = await fetch(
+                    `/api/leads/${encodeURIComponent(lead.id)}/interests`,
+                    {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ items }),
+                    },
+                  );
+                  const body = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    return {
+                      ok: false as const,
+                      error:
+                        typeof body.error === 'string'
+                          ? body.error
+                          : "Impossible d'enregistrer les intérêts.",
+                    };
+                  }
+
+                  const refreshed = await fetch(`/api/leads/${lead.id}`)
+                    .then((r) => (r.ok ? r.json() : null))
+                    .catch(() => null);
+                  if (refreshed) setLead(refreshed);
+
+                  return {
+                    ok: true as const,
+                    message: typeof body.message === 'string' ? body.message : undefined,
+                    counts: body.counts,
+                  };
+                } catch {
+                  return {
+                    ok: false as const,
+                    error: "Une erreur est survenue lors de l'enregistrement.",
+                  };
+                }
+              }}
+            />
+            </div>
           </div>
 
           {/* Colonne centrale - Activités */}

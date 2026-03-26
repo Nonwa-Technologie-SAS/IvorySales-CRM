@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { BookOpen, LogOut, Search, Settings, User } from 'lucide-react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -46,13 +47,22 @@ export default function Navbar() {
 
   return (
     <header className='flex items-center justify-between pb-4 bg-transparent'>
-      <div className='flex flex-col gap-1'>
-        <span className='text-xs text-gray-400'>
-          {user ? `Bonjour, ${user.name}` : 'Bonjour'}
-        </span>
-        <h1 className='text-lg md:text-2xl font-semibold text-primary'>
-          Vue d&apos;ensemble KpiTracker
-        </h1>
+      <div className='flex items-start gap-3'>
+        <Image
+          src='/kpitracker-mark.svg'
+          alt=''
+          width={36}
+          height={36}
+          className='hidden sm:block h-9 w-9 shrink-0 mt-0.5 drop-shadow-sm'
+        />
+        <div className='flex flex-col gap-1'>
+          <span className='text-xs text-gray-400'>
+            {user ? `Bonjour, ${user.name}` : 'Bonjour'}
+          </span>
+          <h1 className='text-lg md:text-2xl font-semibold text-primary'>
+            Vue d&apos;ensemble KpiTracker
+          </h1>
+        </div>
       </div>
 
       <div className='flex items-center gap-3'>
