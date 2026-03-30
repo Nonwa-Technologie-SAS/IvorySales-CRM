@@ -12,7 +12,23 @@ type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 export async function GET() {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Non authentifié" },
+        { status: 401 },
+      );
+    }
+
+    if (!user.companyId) {
+      return NextResponse.json(
+        { error: "Aucune société associée à l'utilisateur" },
+        { status: 400 },
+      );
+    }
+
     const clients = await prisma.client.findMany({
+      where: { companyId: user.companyId },
       include: {
         company: true,
         convertedBy: {
