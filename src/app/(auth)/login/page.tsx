@@ -10,6 +10,7 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -45,8 +46,22 @@ export default function LoginPage() {
         return;
       }
 
+      // Connexion sans MFA : on affiche un toast puis on redirige vers la page d'origine (from) ou le dashboard.
+      const params = new URLSearchParams(window.location.search);
+      const from = params.get('from');
+      const target = from && from !== '/login' ? from : '/';
+
+      setSuccess('Connexion réussie');
       window.dispatchEvent(new Event('auth:changed'));
-      router.push('/');
+      // On attend 1500ms pour laisser le toast s'afficher puis on force une navigation complète
+      // pour garantir la prise en compte des cookies en prod (Vercel).
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          window.location.href = target;
+        }, 1500);
+      } else {
+        router.replace(target);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inattendue');
     } finally {
@@ -189,6 +204,14 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {success && (
+        <div className='fixed bottom-4 right-4 z-50'>
+          <div className='rounded-xl bg-emerald-600 text-white text-xs px-4 py-3 shadow-lg shadow-emerald-500/30'>
+            {success}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
