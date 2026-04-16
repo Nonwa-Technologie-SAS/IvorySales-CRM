@@ -22,7 +22,7 @@ interface UserRow {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'agent';
+  role: 'admin' | 'manager' | 'directrice_commerciale' | 'agent';
   status: 'active' | 'invited' | 'suspended';
   lastLogin: string;
 }
@@ -33,7 +33,7 @@ function UsersPageInner() {
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roleFilter, setRoleFilter] = useState<
-    'all' | 'admin' | 'manager' | 'agent'
+    'all' | 'admin' | 'manager' | 'directrice_commerciale' | 'agent'
   >('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
@@ -110,7 +110,7 @@ function UsersPageInner() {
             Gérez les comptes, les rôles et les droits d'accès de votre équipe.
           </p>
         </div>
-        {(authUser.role === 'admin' || authUser.role === 'manager') && (
+        {(authUser.role === 'admin' || authUser.role === 'manager' || authUser.role === 'directrice_commerciale') && (
           <button
             type='button'
             onClick={() => setCreateOpen(true)}
@@ -134,7 +134,7 @@ function UsersPageInner() {
             />
           </div>
           <div className='flex items-center gap-1 text-[11px] bg-gray-50 rounded-full p-1 border border-gray-100 w-fit'>
-            {['all', 'admin', 'manager', 'agent'].map((role) => (
+            {['all', 'admin', 'manager', 'directrice_commerciale', 'agent'].map((role) => (
               <button
                 key={role}
                 type='button'
@@ -203,7 +203,7 @@ function UsersPageInner() {
                   >
                     <td className='py-2'>
                       <div className='flex items-center gap-2'>
-                        <div className='w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-white flex items-center justify-center text-[11px] font-semibold'>
+                        <div className='w-7 h-7 rounded-full bg-linear-to-br from-violet-500 to-indigo-500 text-white flex items-center justify-center text-[11px] font-semibold'>
                           {user.name[0]}
                         </div>
                         <div className='flex flex-col'>
@@ -256,7 +256,7 @@ function UsersPageInner() {
                           >
                             Voir
                           </DropdownMenuItem>
-                          {(authUser.role === 'admin' || authUser.role === 'manager') && (
+                          {(authUser.role === 'admin' || authUser.role === 'manager' || authUser.role === 'directrice_commerciale') && (
                             <>
                               {user.role === 'agent' && (
                                 <DropdownMenuItem

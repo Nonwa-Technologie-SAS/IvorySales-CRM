@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth";
 
 /** GET /api/leads/[id]/activities - Activités paginées pour un lead */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireRole(["ADMIN", "MANAGER", "AGENT"]);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
   try {
     const { id } = await params;
     const url = new URL(req.url);
@@ -33,6 +37,18 @@ export async function GET(
       ) {
         where.type = filterTypeParam;
       }
+    }
+
+    // Multi-tenant: on vérifie que le lead appartient à l'entreprise de l'utilisateur.
+    const lead = await prisma.lead.findUnique({
+      where: { id },
+      select: { id: true, companyId: true },
+    });
+    if (!lead) {
+      return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
+    }
+    if (!user.companyId || lead.companyId !== user.companyId) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const [activities, total] = await Promise.all([

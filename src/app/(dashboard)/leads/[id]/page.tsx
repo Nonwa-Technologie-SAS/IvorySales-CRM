@@ -65,6 +65,7 @@ interface LeadDetail {
   phone?: string | null;
   source?: string | null;
   companyName?: string | null;
+  jobTitle?: string | null;
   location?: string | null;
   activityDomain?: string | null;
   notes?: string | null;
@@ -75,10 +76,73 @@ interface LeadDetail {
   activities: Activity[];
   products?: { id: string; name: string }[];
   services?: { id: string; name: string }[];
-  productInterests?: { product: { id: string; name: string }; estimatedValue: number }[];
-  serviceInterests?: { service: { id: string; name: string }; estimatedValue: number }[];
+  productInterests?: {
+    product?: { id: string; name: string } | null;
+    customName?: string | null;
+    estimatedValue: number;
+  }[];
+  serviceInterests?: {
+    service?: { id: string; name: string } | null;
+    customName?: string | null;
+    estimatedValue: number;
+  }[];
   totalActivities?: number;
   hasMoreActivities?: boolean;
+}
+
+type CompanyCatalogLite = {
+  id: string;
+  name: string;
+  products: InterestItemLite[];
+  services: InterestItemLite[];
+};
+
+function formatMoneyFr(value: number) {
+  return value.toLocaleString('fr-FR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function normalizeCustomName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr-FR');
+}
+
+function makeCustomKey(kind: 'product' | 'service', customName: string) {
+  return `custom:${kind}:${normalizeCustomName(customName)}`;
+}
+
+/** Résumé affiché dans le bloc profil : pivots d'intérêt en priorité, sinon relations legacy. */
+function leadProductInterestSummary(lead: LeadDetail): string {
+  if (lead.productInterests && lead.productInterests.length > 0) {
+    return lead.productInterests
+      .map((i) => {
+        const name = i.product?.name ?? i.customName ?? 'Autre produit';
+        const label = `${name} (${formatMoneyFr(i.estimatedValue)} FCFA)`;
+        return label;
+      })
+      .join(', ');
+  }
+  if (lead.products && lead.products.length > 0) {
+    return lead.products.map((p) => p.name).join(', ');
+  }
+  return '—';
+}
+
+function leadServiceInterestSummary(lead: LeadDetail): string {
+  if (lead.serviceInterests && lead.serviceInterests.length > 0) {
+    return lead.serviceInterests
+      .map((i) => {
+        const name = i.service?.name ?? i.customName ?? 'Autre service';
+        const label = `${name} (${formatMoneyFr(i.estimatedValue)} FCFA)`;
+        return label;
+      })
+      .join(', ');
+  }
+  if (lead.services && lead.services.length > 0) {
+    return lead.services.map((s) => s.name).join(', ');
+  }
+  return '—';
 }
 
 export default function LeadDetailPage() {
@@ -100,6 +164,7 @@ export default function LeadDetailPage() {
 
   const [allProducts, setAllProducts] = useState<InterestItemLite[]>([]);
   const [allServices, setAllServices] = useState<InterestItemLite[]>([]);
+  const [partnerCompanies, setPartnerCompanies] = useState<CompanyCatalogLite[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
 
   useEffect(() => {
@@ -149,6 +214,55 @@ export default function LeadDetailPage() {
           : [];
         setAllProducts(products);
         setAllServices(services);
+
+        const companiesRes = await fetch('/api/companies/catalog');
+        if (!companiesRes.ok) return;
+        const companiesJson = await companiesRes.json();
+        if (cancelled) return;
+        const companies: CompanyCatalogLite[] = Array.isArray(companiesJson)
+          ? (companiesJson as unknown[])
+              .map((company) => {
+                if (!company || typeof company !== 'object') return null;
+                const obj = company as Record<string, unknown>;
+                const id = typeof obj.id === 'string' ? obj.id : String(obj.id ?? '');
+                const name = typeof obj.name === 'string' ? obj.name : String(obj.name ?? '');
+
+                const productsRaw = Array.isArray(obj.products) ? obj.products : [];
+                const servicesRaw = Array.isArray(obj.services) ? obj.services : [];
+                const parsedProducts: InterestItemLite[] = productsRaw
+                  .map((p) => {
+                    if (!p || typeof p !== 'object') return null;
+                    const item = p as Record<string, unknown>;
+                    const itemId =
+                      typeof item.id === 'string' ? item.id : String(item.id ?? '');
+                    const itemName =
+                      typeof item.name === 'string'
+                        ? item.name
+                        : String(item.name ?? '');
+                    return itemId && itemName ? { id: itemId, name: itemName } : null;
+                  })
+                  .filter((p): p is InterestItemLite => !!p);
+                const parsedServices: InterestItemLite[] = servicesRaw
+                  .map((s) => {
+                    if (!s || typeof s !== 'object') return null;
+                    const item = s as Record<string, unknown>;
+                    const itemId =
+                      typeof item.id === 'string' ? item.id : String(item.id ?? '');
+                    const itemName =
+                      typeof item.name === 'string'
+                        ? item.name
+                        : String(item.name ?? '');
+                    return itemId && itemName ? { id: itemId, name: itemName } : null;
+                  })
+                  .filter((s): s is InterestItemLite => !!s);
+
+                return id && name
+                  ? ({ id, name, products: parsedProducts, services: parsedServices } satisfies CompanyCatalogLite)
+                  : null;
+              })
+              .filter((company): company is CompanyCatalogLite => !!company)
+          : [];
+        setPartnerCompanies(companies);
       } finally {
         if (!cancelled) setCatalogLoading(false);
       }
@@ -163,18 +277,40 @@ export default function LeadDetailPage() {
       return {
         products: {} as Record<string, number>,
         services: {} as Record<string, number>,
+        customProducts: [] as string[],
+        customServices: [] as string[],
       };
     }
+    const customProducts: string[] = [];
+    const customServices: string[] = [];
     const productFromPivot =
       lead.productInterests && lead.productInterests.length > 0
         ? Object.fromEntries(
-            lead.productInterests.map((i) => [i.product.id, i.estimatedValue]),
+            lead.productInterests
+              .map((i) => {
+                if (i.product?.id) return [i.product.id, i.estimatedValue] as const;
+                if (i.customName) {
+                  customProducts.push(i.customName);
+                  return [makeCustomKey('product', i.customName), i.estimatedValue] as const;
+                }
+                return null;
+              })
+              .filter((entry): entry is readonly [string, number] => !!entry),
           )
         : {};
     const serviceFromPivot =
       lead.serviceInterests && lead.serviceInterests.length > 0
         ? Object.fromEntries(
-            lead.serviceInterests.map((i) => [i.service.id, i.estimatedValue]),
+            lead.serviceInterests
+              .map((i) => {
+                if (i.service?.id) return [i.service.id, i.estimatedValue] as const;
+                if (i.customName) {
+                  customServices.push(i.customName);
+                  return [makeCustomKey('service', i.customName), i.estimatedValue] as const;
+                }
+                return null;
+              })
+              .filter((entry): entry is readonly [string, number] => !!entry),
           )
         : {};
 
@@ -197,6 +333,8 @@ export default function LeadDetailPage() {
         string,
         number
       >,
+      customProducts,
+      customServices,
     };
   }, [lead]);
 
@@ -360,6 +498,7 @@ export default function LeadDetailPage() {
     source: lead.source,
     notes: lead.notes,
     companyName: lead.companyName ?? lead.company?.name,
+    jobTitle: lead.jobTitle,
     location: lead.location,
     activityDomain: lead.activityDomain,
     civility: lead.civility,
@@ -369,15 +508,8 @@ export default function LeadDetailPage() {
     `${lead.firstName[0] || ''}${lead.lastName[0] || ''}`.toUpperCase();
   const lastActivity = lead.activities[0];
 
-  const productNames =
-    lead.products && lead.products.length
-      ? lead.products.map((p) => p.name).join(', ')
-      : '—';
-
-  const serviceNames =
-    lead.services && lead.services.length
-      ? lead.services.map((s) => s.name).join(', ')
-      : '—';
+  const productNames = leadProductInterestSummary(lead);
+  const serviceNames = leadServiceInterestSummary(lead);
 
   const currentStageIndex = LIFECYCLE_STAGES.findIndex(
     (s) => s.key === lead.status,
@@ -517,7 +649,7 @@ export default function LeadDetailPage() {
                     {lead.firstName} {lead.lastName}
                   </h1>
                   <p className='text-[11px] text-gray-500'>
-                    {lead.company?.name ?? '—'}
+                    {lead.companyName ?? lead.company?.name ?? '—'}
                   </p>
                 </div>
                 <div className='flex items-center gap-2'>
@@ -692,6 +824,10 @@ export default function LeadDetailPage() {
                     </span>
                   </div>
                   <div className='flex justify-between'>
+                    <span className='text-gray-500'>Poste / Fonction</span>
+                    <span className='text-gray-700'>{lead.jobTitle ?? '—'}</span>
+                  </div>
+                  <div className='flex justify-between'>
                     <span className='text-gray-500'>Localisation</span>
                     <span className='text-gray-700'>
                       {lead.location ?? '—'}
@@ -733,6 +869,9 @@ export default function LeadDetailPage() {
               key={`${lead.id}:${JSON.stringify(savedInterests)}`}
               products={allProducts}
               services={allServices}
+              partnerCompanies={partnerCompanies}
+              customProducts={savedInterests.customProducts}
+              customServices={savedInterests.customServices}
               initialSaved={savedInterests}
               disabled={catalogLoading || lead.status === 'CONVERTED'}
               onSave={async (items: InterestsPayloadItem[]) => {
@@ -805,61 +944,63 @@ export default function LeadDetailPage() {
                   </button>
                 ))}
               </div>
-              <div className='flex-1 min-h-[200px] overflow-y-auto'>
-                {activeTab === 'agenda' ? (
-                  <AgendaTab leadId={lead.id} />
-                ) : activeTab === 'emails' ? (
-                  <EmailsTabContent
-                    emails={lead.activities.filter((a) => a.type === 'EMAIL')}
-                    loading={false}
-                    recipientName={`${lead.firstName} ${lead.lastName}`}
-                    recipientEmail={lead.email ?? ''}
-                    onCreateEmail={() => setCreateEmailOpen(true)}
-                    onEmailAdded={(a) =>
-                      setLead((prev) =>
-                        prev
-                          ? { ...prev, activities: [a, ...prev.activities] }
-                          : prev,
-                      )
-                    }
-                  />
-                ) : activeTab === 'meetings' ? (
-                  <MeetingsTabContent
-                    meetings={lead.activities.filter(
-                      (a) => a.type === 'MEETING',
-                    )}
-                    loading={false}
-                    leadId={lead.id}
-                    leadName={`${lead.firstName} ${lead.lastName}`}
-                    onCreateSuccess={(a) =>
-                      setLead((prev) =>
-                        prev
-                          ? { ...prev, activities: [a, ...prev.activities] }
-                          : prev,
-                      )
-                    }
-                  />
-                ) : (
-                  <InteractionHistory
-                    lead={leadAsLead}
-                    activities={lead.activities}
-                    filterType={
-                      ACTIVITY_TABS.find((t) => t.key === activeTab)?.filterType
-                    }
-                    title={
-                      activeTab === 'calls' ? 'Journal des appels' : undefined
-                    }
-                    initialType={activeTab === 'calls' ? 'CALL' : undefined}
-                    onActivityAdded={(a) =>
-                      setLead((prev) =>
-                        prev
-                          ? { ...prev, activities: [a, ...prev.activities] }
-                          : prev,
-                      )
-                    }
-                  />
-                )}
-              </div>
+              {activeTab === 'agenda' ? (
+                <AgendaTab leadId={lead.id} />
+              ) : (
+                <div className='flex-1 min-h-[200px] overflow-y-auto'>
+                  {activeTab === 'emails' ? (
+                    <EmailsTabContent
+                      emails={lead.activities.filter((a) => a.type === 'EMAIL')}
+                      loading={false}
+                      recipientName={`${lead.firstName} ${lead.lastName}`}
+                      recipientEmail={lead.email ?? ''}
+                      onCreateEmail={() => setCreateEmailOpen(true)}
+                      onEmailAdded={(a) =>
+                        setLead((prev) =>
+                          prev
+                            ? { ...prev, activities: [a, ...prev.activities] }
+                            : prev,
+                        )
+                      }
+                    />
+                  ) : activeTab === 'meetings' ? (
+                    <MeetingsTabContent
+                      meetings={lead.activities.filter(
+                        (a) => a.type === 'MEETING',
+                      )}
+                      loading={false}
+                      leadId={lead.id}
+                      leadName={`${lead.firstName} ${lead.lastName}`}
+                      onCreateSuccess={(a) =>
+                        setLead((prev) =>
+                          prev
+                            ? { ...prev, activities: [a, ...prev.activities] }
+                            : prev,
+                        )
+                      }
+                    />
+                  ) : (
+                    <InteractionHistory
+                      lead={leadAsLead}
+                      activities={lead.activities}
+                      filterType={
+                        ACTIVITY_TABS.find((t) => t.key === activeTab)?.filterType
+                      }
+                      title={
+                        activeTab === 'calls' ? 'Journal des appels' : undefined
+                      }
+                      initialType={activeTab === 'calls' ? 'CALL' : undefined}
+                      onActivityAdded={(a) =>
+                        setLead((prev) =>
+                          prev
+                            ? { ...prev, activities: [a, ...prev.activities] }
+                            : prev,
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              )}
               {activeTab !== 'agenda' && lead.hasMoreActivities && (
                 <div className='mt-3 flex justify-center'>
                   <button

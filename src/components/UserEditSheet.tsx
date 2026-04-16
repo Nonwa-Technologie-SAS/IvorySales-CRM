@@ -11,16 +11,16 @@ interface UserEditSheetProps {
     id: string;
     name: string;
     email: string;
-    role: "admin" | "manager" | "agent";
+    role: "admin" | "manager" | "directrice_commerciale" | "agent";
   } | null;
   onOpenChange: (open: boolean) => void;
-  onUpdated: (user: { id: string; name: string; email: string; role: "admin" | "manager" | "agent" }) => void;
+  onUpdated: (user: { id: string; name: string; email: string; role: "admin" | "manager" | "directrice_commerciale" | "agent" }) => void;
 }
 
 export function UserEditSheet({ open, user, onOpenChange, onUpdated }: UserEditSheetProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "manager" | "agent">("agent");
+  const [role, setRole] = useState<"admin" | "manager" | "directrice_commerciale" | "agent">("agent");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +49,7 @@ export function UserEditSheet({ open, user, onOpenChange, onUpdated }: UserEditS
           id: user.id,
           name,
           email,
-          role: role.toUpperCase(), // API attend ADMIN | MANAGER | AGENT
+          role: role.toUpperCase(), // API attend ADMIN | MANAGER | DIRECTRICE_COMMERCIALE | AGENT
         }),
       });
 
@@ -106,6 +106,7 @@ export function UserEditSheet({ open, user, onOpenChange, onUpdated }: UserEditS
               {([
                 ["agent", "Commercial"],
                 ["manager", "Manager"],
+                ["directrice_commerciale", "Directrice commerciale"],
                 ["admin", "Admin"],
               ] as const).map(([value, label]) => (
                 <button

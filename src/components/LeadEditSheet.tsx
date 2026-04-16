@@ -105,6 +105,7 @@ export default function LeadEditSheet({ open, lead, onClose, onUpdated, onDelete
     const phone = String(data.get("phone") || "");
     const source = String(data.get("source") || "");
     const companyName = String(data.get("companyName") || "");
+    const jobTitle = String(data.get("jobTitle") || "");
     const location = String(data.get("location") || "");
     const activityDomain = String(data.get("activityDomain") || "");
     const civility = String(data.get("civility") || "");
@@ -125,6 +126,7 @@ export default function LeadEditSheet({ open, lead, onClose, onUpdated, onDelete
           phone: phone || undefined,
           source: source || undefined,
           companyName: companyName || undefined,
+          jobTitle: jobTitle || undefined,
           location: location || undefined,
           activityDomain: activityDomain || undefined,
           civility: civility || undefined,
@@ -232,6 +234,12 @@ export default function LeadEditSheet({ open, lead, onClose, onUpdated, onDelete
                 name="companyName"
                 label="Nom de la compagnie"
                 defaultValue={lead.companyName ?? ""}
+              />
+              <Field
+                name="jobTitle"
+                label="Poste / Fonction"
+                placeholder="Ex: Directeur commercial"
+                defaultValue={lead.jobTitle ?? ""}
               />
               <Field
                 name="location"

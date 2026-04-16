@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireRole } from "@/lib/auth";
 
 const ACTIVITY_TYPES = ["CALL", "EMAIL", "WHATSAPP", "MEETING", "NOTE"] as const;
 
@@ -16,12 +17,27 @@ const createActivitySchema = z.object({
 
 /** GET /api/activities?leadId=xxx - Liste les activités d'un lead */
 export async function GET(req: Request) {
+  const auth = await requireRole(["ADMIN", "MANAGER", "AGENT"]);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
   try {
     const url = new URL(req.url);
     const leadId = url.searchParams.get("leadId");
 
     if (!leadId) {
       return NextResponse.json({ error: "leadId requis" }, { status: 400 });
+    }
+
+    // Multi-tenant: on vérifie que le lead appartient à l'entreprise de l'utilisateur.
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { id: true, companyId: true },
+    });
+    if (!lead) {
+      return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
+    }
+    if (!user.companyId || lead.companyId !== user.companyId) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const activities = await prisma.activity.findMany({
@@ -44,27 +60,24 @@ export async function GET(req: Request) {
 
 /** POST /api/activities - Crée une interaction */
 export async function POST(req: Request) {
+  const auth = await requireRole(["ADMIN", "MANAGER", "AGENT"]);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
   try {
     const json = await req.json();
     const body = createActivitySchema.parse(json);
 
     const lead = await prisma.lead.findUnique({
       where: { id: body.leadId },
-      include: { company: { include: { users: { take: 1 } } } },
+      select: { id: true, companyId: true },
     });
 
     if (!lead) {
       return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
     }
 
-    const firstUser = await prisma.user.findFirst();
-    const userId = lead.company.users[0]?.id ?? firstUser?.id;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Aucun utilisateur dans la société pour enregistrer l'activité" },
-        { status: 400 }
-      );
+    if (!user.companyId || lead.companyId !== user.companyId) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const activity = await prisma.activity.create({
@@ -72,7 +85,7 @@ export async function POST(req: Request) {
         type: body.type,
         relatedTo: "LEAD",
         leadId: body.leadId,
-        userId,
+        userId: user.id,
         content: body.content,
         // si une date est fournie (ex. pour un rendez-vous), on l'utilise
         date: body.date ? new Date(body.date) : undefined,

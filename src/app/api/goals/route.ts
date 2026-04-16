@@ -1,4 +1,4 @@
-import { getCurrentUser, requireRole } from '@/lib/auth';
+import { getCurrentUser, requireRole, resolveGroupCompanyScope } from '@/lib/auth';
 import { getPeriodBounds, getPeriodLabel } from '@/lib/goalPeriods';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
@@ -41,7 +41,6 @@ export async function POST(req: Request) {
         { status: 403 },
       );
     }
-
     const { periodStart, periodEnd } = getPeriodBounds(
       body.periodType,
       body.year,
@@ -98,7 +97,7 @@ export async function POST(req: Request) {
   }
 }
 
-/** GET : liste des objectifs. ADMIN/MANAGER = company ; AGENT = uniquement les siens. Query : userId?, periodType?, year?. Réalisé (conversions + CA) calculé par objectif. */
+/** GET : liste des objectifs. ADMIN/MANAGER = company ; AGENT = uniquement les siens. DIRECTRICE : ?companyId= (optionnel, aligné /api/leads). Query : userId?, periodType?, year?. */
 export async function GET(req: Request) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
@@ -116,8 +115,18 @@ export async function GET(req: Request) {
   const periodTypeParam = url.searchParams.get('periodType');
   const yearParam = url.searchParams.get('year');
 
+  let scopeCompanyId = currentUser.companyId;
+  if (currentUser.role === 'DIRECTRICE_COMMERCIALE') {
+    const scope = await resolveGroupCompanyScope(
+      currentUser,
+      url.searchParams.get('companyId'),
+    );
+    if (scope instanceof NextResponse) return scope;
+    scopeCompanyId = scope.companyId;
+  }
+
   let where: Prisma.SalesGoalWhereInput = {
-    companyId: currentUser.companyId,
+    companyId: scopeCompanyId,
   };
 
   if (currentUser.role === 'AGENT') {
@@ -127,7 +136,7 @@ export async function GET(req: Request) {
       where: { id: userIdParam },
       select: { companyId: true },
     });
-    if (!target || target.companyId !== currentUser.companyId) {
+    if (!target || target.companyId !== scopeCompanyId) {
       return NextResponse.json(
         { error: 'Utilisateur non trouvé ou autre entreprise' },
         { status: 403 },

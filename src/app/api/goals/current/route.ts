@@ -1,7 +1,7 @@
-import { getCurrentUser } from "@/lib/auth";
-import { getPeriodLabel } from "@/lib/goalPeriods";
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { getCurrentUser, resolveGroupCompanyScope } from '@/lib/auth';
+import { getPeriodLabel } from '@/lib/goalPeriods';
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
 
 type GoalCurrentDto = {
   user: { id: string; name: string; email: string };
@@ -12,19 +12,17 @@ type GoalCurrentDto = {
   realizedRevenue: number;
 };
 
-async function withRealized(
-  goal: {
-    id: string;
-    userId: string;
-    companyId: string;
-    periodType: "MONTH" | "QUARTER" | "SEMESTER" | "YEAR";
-    periodStart: Date;
-    periodEnd: Date;
-    targetConversions: number;
-    targetRevenue: number;
-    user: { id: string; name: string; email: string };
-  }
-): Promise<GoalCurrentDto> {
+async function withRealized(goal: {
+  id: string;
+  userId: string;
+  companyId: string;
+  periodType: 'MONTH' | 'QUARTER' | 'SEMESTER' | 'YEAR';
+  periodStart: Date;
+  periodEnd: Date;
+  targetConversions: number;
+  targetRevenue: number;
+  user: { id: string; name: string; email: string };
+}): Promise<GoalCurrentDto> {
   const realizedConversions = await prisma.client.count({
     where: {
       convertedById: goal.userId,
@@ -59,29 +57,29 @@ async function withRealized(
   };
 }
 
-/** GET /api/goals/current?userId=... (optionnel)
+/** GET /api/goals/current?userId=...&companyId=... (directrice : entreprise du groupe)
  *  - AGENT (sans userId): objectif courant de l'agent, ou null
- *  - ADMIN/MANAGER + userId: objectif courant de ce commercial, ou null
- *  - ADMIN/MANAGER sans userId: tableau des objectifs courants (un par commercial)
+ *  - ADMIN/MANAGER/DIRECTRICE + userId: objectif courant de ce commercial, ou null
+ *  - ADMIN/MANAGER/DIRECTRICE sans userId: tableau des objectifs courants (un par commercial)
  */
 export async function GET(req: Request) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
   }
   if (!currentUser.companyId) {
     return NextResponse.json(
-      { error: "Utilisateur sans entreprise" },
-      { status: 403 }
+      { error: 'Utilisateur sans entreprise' },
+      { status: 403 },
     );
   }
 
   const url = new URL(req.url);
-  const userIdParam = url.searchParams.get("userId");
+  const userIdParam = url.searchParams.get('userId');
   const now = new Date();
 
   // Cas 1: AGENT (toujours son propre objectif courant, pas de userId nécessaire)
-  if (currentUser.role === "AGENT") {
+  if (currentUser.role === 'AGENT') {
     const goal = await prisma.salesGoal.findFirst({
       where: {
         companyId: currentUser.companyId,
@@ -92,7 +90,7 @@ export async function GET(req: Request) {
       include: {
         user: { select: { id: true, name: true, email: true } },
       },
-      orderBy: { periodStart: "desc" },
+      orderBy: { periodStart: 'desc' },
     });
 
     if (!goal) {
@@ -103,27 +101,38 @@ export async function GET(req: Request) {
     return NextResponse.json(dto);
   }
 
-  // À partir d'ici: ADMIN ou MANAGER uniquement
-  if (currentUser.role !== "ADMIN" && currentUser.role !== "MANAGER") {
-    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+  // À partir d'ici: ADMIN, MANAGER ou DIRECTRICE_COMMERCIALE
+  if (
+    currentUser.role !== 'ADMIN' &&
+    currentUser.role !== 'MANAGER' &&
+    currentUser.role !== 'DIRECTRICE_COMMERCIALE'
+  ) {
+    return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
   }
 
-  // Cas 2: ADMIN/MANAGER + userId => objectif courant unique ou null
+  const scopeRes = await resolveGroupCompanyScope(
+    currentUser,
+    url.searchParams.get('companyId'),
+  );
+  if (scopeRes instanceof NextResponse) return scopeRes;
+  const scopeCompanyId = scopeRes.companyId;
+
+  // Cas 2: + userId => objectif courant unique ou null
   if (userIdParam) {
     const targetUser = await prisma.user.findUnique({
       where: { id: userIdParam },
       select: { id: true, companyId: true, name: true, email: true },
     });
-    if (!targetUser || targetUser.companyId !== currentUser.companyId) {
+    if (!targetUser || targetUser.companyId !== scopeCompanyId) {
       return NextResponse.json(
-        { error: "Utilisateur non trouvé ou autre entreprise" },
-        { status: 403 }
+        { error: 'Utilisateur non trouvé ou autre entreprise' },
+        { status: 403 },
       );
     }
 
     const goal = await prisma.salesGoal.findFirst({
       where: {
-        companyId: currentUser.companyId,
+        companyId: scopeCompanyId,
         userId: targetUser.id,
         periodStart: { lte: now },
         periodEnd: { gte: now },
@@ -131,7 +140,7 @@ export async function GET(req: Request) {
       include: {
         user: { select: { id: true, name: true, email: true } },
       },
-      orderBy: { periodStart: "desc" },
+      orderBy: { periodStart: 'desc' },
     });
 
     if (!goal) {
@@ -142,17 +151,17 @@ export async function GET(req: Request) {
     return NextResponse.json(dto);
   }
 
-  // Cas 3: ADMIN/MANAGER sans userId => tableau des objectifs courants (un par userId)
+  // Cas 3: sans userId => tableau des objectifs courants (un par userId)
   const goals = await prisma.salesGoal.findMany({
     where: {
-      companyId: currentUser.companyId,
+      companyId: scopeCompanyId,
       periodStart: { lte: now },
       periodEnd: { gte: now },
     },
     include: {
       user: { select: { id: true, name: true, email: true } },
     },
-    orderBy: [{ userId: "asc" }, { periodStart: "desc" }],
+    orderBy: [{ userId: 'asc' }, { periodStart: 'desc' }],
   });
 
   // Garder au plus un objectif courant par commercial (le plus récent)
@@ -168,4 +177,3 @@ export async function GET(req: Request) {
 
   return NextResponse.json(withMetrics);
 }
-

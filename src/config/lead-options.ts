@@ -5,6 +5,7 @@ export const DEFAULT_LEAD_SOURCES = [
   "Non renseigné",
   "Facebook",
   "WhatsApp",
+  "LinkedIn",
   "Site web",
   "Bouche-à-oreille",
   "Email",

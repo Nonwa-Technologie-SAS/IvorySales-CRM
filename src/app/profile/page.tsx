@@ -5,6 +5,7 @@ import NeumoCard from "@/components/NeumoCard";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from "next/navigation";
+import { isAdminOrManagerLike } from "@/lib/roles";
 import {
   Mail,
   Briefcase,
@@ -69,8 +70,7 @@ function ProfilePageInner() {
 
   const isSelf =
     !viewedUserId || (authUser && viewedUserId === authUser.id);
-  const isManagerOrAdmin =
-    authUser?.role === "admin" || authUser?.role === "manager";
+  const isManagerOrAdmin = isAdminOrManagerLike(authUser?.role);
 
   // Charge le profil à afficher :
   // - si aucun userId en query → profil de l'utilisateur connecté
@@ -407,7 +407,7 @@ function ProfilePageInner() {
         {/* Colonne gauche : carte résumé utilisateur */}
         <NeumoCard className="lg:col-span-1 bg-white p-5 flex flex-col gap-4 shadow-neu-soft">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-white flex items-center justify-center text-lg font-semibold">
+            <div className="w-12 h-12 rounded-full bg-linear-to-br from-violet-500 to-indigo-500 text-white flex items-center justify-center text-lg font-semibold">
               {user?.name?.[0] ?? "?"}
             </div>
             <div className="flex flex-col">

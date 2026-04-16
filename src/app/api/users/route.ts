@@ -1,13 +1,16 @@
+import type { Role } from '@/lib/auth';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 const createUserSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['ADMIN', 'MANAGER', 'AGENT']).default('AGENT'),
+  role: z
+    .enum(['ADMIN', 'MANAGER', 'DIRECTRICE_COMMERCIALE', 'AGENT'])
+    .default('AGENT'),
   // optionnel côté API : on créera / utilisera une company par défaut si absent
   companyId: z.string().optional(),
 });
@@ -16,15 +19,23 @@ const updateUserSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
-  role: z.enum(['ADMIN', 'MANAGER', 'AGENT']).optional(),
+  role: z
+    .enum(['ADMIN', 'MANAGER', 'DIRECTRICE_COMMERCIALE', 'AGENT'])
+    .optional(),
 });
 
-/** GET : liste des utilisateurs — réservé à ADMIN et MANAGER (AGENT n'a pas accès). */
-export async function GET() {
+/** GET : liste des utilisateurs — ADMIN/MANAGER/DIRECTRICE (AGENT n'a pas accès).
+ *  DIRECTRICE uniquement : ?companyId= pour cibler une entreprise existante (lecture).
+ */
+export async function GET(req: NextRequest) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user: currentUser } = auth as {
-    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+    user: {
+      id: string;
+      role: Role;
+      companyId: string | null;
+    };
   };
   if (!currentUser.companyId) {
     return NextResponse.json(
@@ -33,8 +44,31 @@ export async function GET() {
     );
   }
   try {
+    const companyIdParam = req.nextUrl.searchParams.get('companyId');
+    let filterCompanyId = currentUser.companyId;
+
+    if (companyIdParam) {
+      if (currentUser.role !== 'DIRECTRICE_COMMERCIALE') {
+        return NextResponse.json(
+          { error: 'Filtre entreprise non autorisé' },
+          { status: 403 },
+        );
+      }
+      const target = await prisma.company.findUnique({
+        where: { id: companyIdParam },
+        select: { id: true },
+      });
+      if (!target) {
+        return NextResponse.json(
+          { error: 'Entreprise introuvable' },
+          { status: 400 },
+        );
+      }
+      filterCompanyId = target.id;
+    }
+
     const users = await prisma.user.findMany({
-      where: { companyId: currentUser.companyId },
+      where: { companyId: filterCompanyId },
       include: { company: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -53,7 +87,11 @@ export async function PATCH(req: Request) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user: currentUser } = auth as {
-    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+    user: {
+      id: string;
+      role: 'ADMIN' | 'MANAGER' | 'AGENT';
+      companyId: string | null;
+    };
   };
   if (!currentUser.companyId) {
     return NextResponse.json(
@@ -100,7 +138,11 @@ export async function DELETE(req: Request) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user: currentUser } = auth as {
-    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+    user: {
+      id: string;
+      role: 'ADMIN' | 'MANAGER' | 'AGENT';
+      companyId: string | null;
+    };
   };
   if (!currentUser.companyId) {
     return NextResponse.json(
@@ -144,7 +186,11 @@ export async function POST(req: Request) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
   if (auth instanceof Response) return auth;
   const { user: currentUser } = auth as {
-    user: { id: string; role: 'ADMIN' | 'MANAGER' | 'AGENT'; companyId: string | null };
+    user: {
+      id: string;
+      role: 'ADMIN' | 'MANAGER' | 'AGENT';
+      companyId: string | null;
+    };
   };
   if (!currentUser.companyId) {
     return NextResponse.json(
@@ -159,7 +205,9 @@ export async function POST(req: Request) {
     let companyId = currentUser.companyId;
     if (body.companyId && body.companyId !== currentUser.companyId) {
       return NextResponse.json(
-        { error: 'Impossible de créer un utilisateur dans une autre entreprise' },
+        {
+          error: 'Impossible de créer un utilisateur dans une autre entreprise',
+        },
         { status: 403 },
       );
     }

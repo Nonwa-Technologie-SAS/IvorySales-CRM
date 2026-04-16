@@ -44,12 +44,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Pages Utilisateurs / Paramètres : réservées à ADMIN et MANAGER (pas AGENT)
+  // Pages Utilisateurs / Paramètres : réservées à ADMIN, MANAGER et DIRECTRICE_COMMERCIALE (pas AGENT)
   if (hasAuth && isAdminOrManagerOnlyPath(pathname)) {
     // On ne bloque que si un rôle explicite non autorisé est présent.
     // Si le cookie de rôle est absent (anciens logins), on laisse passer
     // et on se repose sur les gardes de page + API.
-    if (role && role !== 'ADMIN' && role !== 'MANAGER') {
+    if (role && role !== 'ADMIN' && role !== 'MANAGER' && role !== 'DIRECTRICE_COMMERCIALE') {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }

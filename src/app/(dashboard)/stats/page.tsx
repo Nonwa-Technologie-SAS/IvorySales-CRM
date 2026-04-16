@@ -1,10 +1,11 @@
-"use client";
+'use client';
 
-import NeumoCard from "@/components/NeumoCard";
-import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
-import { useAuth } from "@/contexts/AuthContext";
-import { Target, TrendingUp, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import NeumoCard from '@/components/NeumoCard';
+import { withDashboardLayout } from '@/components/layouts/withDashboardLayout';
+import { useAuth } from '@/contexts/AuthContext';
+import { isAdminOrManagerLike } from '@/lib/roles';
+import { Target, TrendingUp, Users } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface GoalRow {
   id: string;
@@ -31,9 +32,12 @@ interface CurrentGoalSummary {
 function getDefaultMonthRange(): { from: string; to: string } {
   const now = new Date();
   const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const m = String(now.getMonth() + 1).padStart(2, '0');
   const last = new Date(y, now.getMonth() + 1, 0);
-  return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(last.getDate()).padStart(2, "0")}` };
+  return {
+    from: `${y}-${m}-01`,
+    to: `${y}-${m}-${String(last.getDate()).padStart(2, '0')}`,
+  };
 }
 
 interface SalesSummaryReport {
@@ -59,30 +63,44 @@ interface UserOption {
   email?: string;
 }
 
+interface CompanyOption {
+  id: string;
+  name: string;
+}
+
 function StatsPageInner() {
   const { user: authUser } = useAuth();
   const [goals, setGoals] = useState<GoalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [renewingId, setRenewingId] = useState<string | null>(null);
-  const [currentGoalsByUser, setCurrentGoalsByUser] = useState<CurrentGoalSummary[]>([]);
+  const [currentGoalsByUser, setCurrentGoalsByUser] = useState<
+    CurrentGoalSummary[]
+  >([]);
   const [loadingCurrentGoals, setLoadingCurrentGoals] = useState(false);
-  const [automationLoading, setAutomationLoading] = useState(false);
-  const [automationMessage, setAutomationMessage] = useState<string | null>(null);
 
   const defaultRange = getDefaultMonthRange();
   const [reportFrom, setReportFrom] = useState(defaultRange.from);
   const [reportTo, setReportTo] = useState(defaultRange.to);
-  const [reportUserId, setReportUserId] = useState("");
-  const [reportSource, setReportSource] = useState("");
+  const [reportUserId, setReportUserId] = useState('');
+  const [reportSource, setReportSource] = useState('');
   const [report, setReport] = useState<SalesSummaryReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportUsers, setReportUsers] = useState<UserOption[]>([]);
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
+  /** Directrice : '' = pas de companyId en query (API = société rattachée) */
+  const [reportCompanyId, setReportCompanyId] = useState('');
 
-  const fetchGoals = async (withLoading: boolean = false) => {
+  const isDirector = authUser?.role === 'directrice_commerciale';
+
+  const fetchGoals = useCallback(async (withLoading: boolean = false) => {
     try {
       if (withLoading) setLoading(true);
-      const res = await fetch("/api/goals", { cache: "no-store" });
+      const url =
+        isDirector && reportCompanyId.trim()
+          ? `/api/goals?companyId=${encodeURIComponent(reportCompanyId)}`
+          : '/api/goals';
+      const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
       setGoals(data);
@@ -91,23 +109,30 @@ function StatsPageInner() {
     } finally {
       if (withLoading) setLoading(false);
     }
-  };
+  }, [isDirector, reportCompanyId]);
 
-  // Chargement initial des objectifs
+  // Objectifs (tableau + cartes) : même périmètre entreprise que le reste pour la directrice
   useEffect(() => {
     void fetchGoals(true);
-  }, []);
+  }, [fetchGoals]);
 
   // Chargement des objectifs "en cours" pour la vue manager/admin
   useEffect(() => {
-    const isManagerOrAdmin =
-      authUser?.role === "admin" || authUser?.role === "manager";
+    const isManagerOrAdmin = isAdminOrManagerLike(authUser?.role);
     if (!isManagerOrAdmin) return;
 
     const fetchCurrentGoals = async () => {
       try {
         setLoadingCurrentGoals(true);
-        const res = await fetch("/api/goals/current", { cache: "no-store" });
+        const params = new URLSearchParams();
+        if (isDirector && reportCompanyId) {
+          params.set('companyId', reportCompanyId);
+        }
+        const q = params.toString();
+        const res = await fetch(
+          q ? `/api/goals/current?${q}` : '/api/goals/current',
+          { cache: 'no-store' },
+        );
         if (!res.ok) return;
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -121,128 +146,150 @@ function StatsPageInner() {
     };
 
     void fetchCurrentGoals();
-  }, [authUser?.role]);
+  }, [authUser?.role, isDirector, reportCompanyId]);
 
   // Rafraîchir les objectifs quand une conversion a eu lieu (événement global)
   useEffect(() => {
     const handler = () => {
       void fetchGoals(false);
     };
-    window.addEventListener("crm:goals-invalidate", handler);
-    return () => window.removeEventListener("crm:goals-invalidate", handler);
-  }, []);
+    window.addEventListener('crm:goals-invalidate', handler);
+    return () => window.removeEventListener('crm:goals-invalidate', handler);
+  }, [fetchGoals]);
 
-  // Charger la liste des utilisateurs pour le filtre "Commercial" (rapports)
+  // Liste entreprises du groupe uniquement (directrice) — même règle que la page Leads
   useEffect(() => {
-    const isManagerOrAdmin =
-      authUser?.role === "admin" || authUser?.role === "manager";
-    if (!isManagerOrAdmin) return;
-    const fetchUsers = async () => {
+    if (!isDirector) return;
+    const load = async () => {
       try {
-        const res = await fetch("/api/users", { cache: "no-store" });
+        const res = await fetch('/api/companies', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
         if (Array.isArray(data)) {
-          setReportUsers(data.map((u: { id: string; name: string; email?: string }) => ({ id: u.id, name: u.name, email: u.email })));
+          const groupCompanies = data.filter(
+            (c: { kind?: string }) => c.kind === 'GROUP',
+          );
+          setCompanyOptions(
+            groupCompanies.map((c: { id: string; name: string }) => ({
+              id: c.id,
+              name: c.name,
+            })),
+          );
+        }
+      } catch {
+        // silencieux
+      }
+    };
+    void load();
+  }, [isDirector]);
+
+  // Si l’entreprise choisie n’est plus dans la liste (ex. société cliente), revenir au périmètre par défaut
+  useEffect(() => {
+    if (!isDirector || !reportCompanyId) return;
+    if (companyOptions.length === 0) return;
+    if (!companyOptions.some((c) => c.id === reportCompanyId)) {
+      setReportCompanyId('');
+      setReportUserId('');
+      setReport(null);
+    }
+  }, [isDirector, reportCompanyId, companyOptions]);
+
+  // Charger la liste des utilisateurs pour le filtre "Commercial" (rapports)
+  useEffect(() => {
+    const isManagerOrAdmin = isAdminOrManagerLike(authUser?.role);
+    if (!isManagerOrAdmin) return;
+    const fetchUsers = async () => {
+      try {
+        const url =
+          isDirector && reportCompanyId
+            ? `/api/users?companyId=${encodeURIComponent(reportCompanyId)}`
+            : '/api/users';
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setReportUsers(
+            data.map((u: { id: string; name: string; email?: string }) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+            })),
+          );
         }
       } catch {
         // silencieux
       }
     };
     void fetchUsers();
-  }, [authUser?.role]);
+  }, [authUser?.role, isDirector, reportCompanyId]);
 
-  const isManagerOrAdmin =
-    authUser?.role === "admin" || authUser?.role === "manager";
-  const isAgent = authUser?.role === "agent";
+  const isManagerOrAdmin = isAdminOrManagerLike(authUser?.role);
+  const isAgent = authUser?.role === 'agent';
   const currentPeriodGoal =
     isAgent && goals.length > 0
-      ? goals.find((g) => {
+      ? (goals.find((g) => {
           const end = new Date(g.periodEnd);
           const start = new Date(g.periodStart);
           const now = new Date();
           return now >= start && now <= end;
-        }) ?? goals[0]
+        }) ?? goals[0])
       : null;
 
   const handleRenew = async (goal: GoalRow) => {
     try {
       setRenewingId(goal.id);
       const res = await fetch(`/api/goals/${goal.id}/renew`, {
-        method: "POST",
+        method: 'POST',
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         window.alert(
           (data && data.error) ||
-            "Impossible de reconduire cet objectif. Veuillez réessayer."
+            'Impossible de reconduire cet objectif. Veuillez réessayer.',
         );
         return;
       }
       await fetchGoals(false);
     } catch {
       window.alert(
-        "Une erreur est survenue lors de la reconduction de l'objectif."
+        "Une erreur est survenue lors de la reconduction de l'objectif.",
       );
     } finally {
       setRenewingId(null);
     }
   };
 
-  const handleRunAutomation = async () => {
-    try {
-      setAutomationMessage(null);
-      setAutomationLoading(true);
-      const res = await fetch("/api/automation/remind-stale-leads", {
-        method: "POST",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setAutomationMessage(
-          typeof data.error === "string"
-            ? data.error
-            : "Impossible de lancer la relance automatique.",
-        );
-        return;
-      }
-      const created = Number(data.createdTasks ?? 0);
-      setAutomationMessage(
-        created === 0
-          ? "Aucune tâche de relance à créer."
-          : `${created} tâche(s) de relance créée(s).`,
-      );
-    } catch {
-      setAutomationMessage(
-        "Une erreur est survenue lors de la relance automatique.",
-      );
-    } finally {
-      setAutomationLoading(false);
-      setTimeout(() => setAutomationMessage(null), 8000);
-    }
-  };
-
   const handleGenerateReport = async () => {
     setReportError(null);
     if (!reportFrom.trim() || !reportTo.trim()) {
-      setReportError("Veuillez renseigner les dates de début et de fin.");
+      setReportError('Veuillez renseigner les dates de début et de fin.');
       return;
     }
     try {
       setReportLoading(true);
       const params = new URLSearchParams({ from: reportFrom, to: reportTo });
-      if (reportUserId.trim()) params.set("userId", reportUserId);
-      if (reportSource.trim()) params.set("source", reportSource);
-      const res = await fetch(`/api/reports/sales-summary?${params.toString()}`);
+      if (reportUserId.trim()) params.set('userId', reportUserId);
+      if (reportSource.trim()) params.set('source', reportSource);
+      if (isDirector && reportCompanyId.trim()) {
+        params.set('companyId', reportCompanyId);
+      }
+      const res = await fetch(
+        `/api/reports/sales-summary?${params.toString()}`,
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setReport(null);
-        setReportError(typeof data?.error === "string" ? data.error : "Impossible de générer le rapport.");
+        setReportError(
+          typeof data?.error === 'string'
+            ? data.error
+            : 'Impossible de générer le rapport.',
+        );
         return;
       }
       setReport(data);
     } catch {
       setReport(null);
-      setReportError("Impossible de générer le rapport.");
+      setReportError('Impossible de générer le rapport.');
     } finally {
       setReportLoading(false);
     }
@@ -250,17 +297,22 @@ function StatsPageInner() {
 
   const handleExportReport = async () => {
     const params = new URLSearchParams({ from: reportFrom, to: reportTo });
-    if (reportUserId.trim()) params.set("userId", reportUserId);
-    if (reportSource.trim()) params.set("source", reportSource);
+    if (reportUserId.trim()) params.set('userId', reportUserId);
+    if (reportSource.trim()) params.set('source', reportSource);
+    if (isDirector && reportCompanyId.trim()) {
+      params.set('companyId', reportCompanyId);
+    }
     try {
-      const res = await fetch(`/api/reports/sales-summary/export?${params.toString()}`);
+      const res = await fetch(
+        `/api/reports/sales-summary/export?${params.toString()}`,
+      );
       if (!res.ok) return;
       const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition");
+      const disposition = res.headers.get('Content-Disposition');
       const match = disposition?.match(/filename="?([^";]+)"?/);
       const name = match?.[1] ?? `rapport-ventes-${reportFrom}_${reportTo}.csv`;
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
       a.download = name;
       a.click();
@@ -272,69 +324,76 @@ function StatsPageInner() {
 
   return (
     <>
-      <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-2">
+      <section className='mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
         <div>
-          <h1 className="text-xl md:text-2xl font-semibold text-primary">
+          <h1 className='text-xl md:text-2xl font-semibold text-primary'>
             Statistiques
           </h1>
-          <p className="text-xs md:text-sm text-gray-500">
-            Suivi des performances commerciales, taux de conversion et objectifs.
+          <p className='text-xs md:text-sm text-gray-500'>
+            Suivi des performances commerciales, taux de conversion et
+            objectifs.
           </p>
         </div>
-        {isManagerOrAdmin && (
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-2">
-            <button
-              type="button"
-              onClick={handleRunAutomation}
-              disabled={automationLoading}
-              className="px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium border border-primary/20 hover:bg-primary/15 disabled:opacity-60"
+        {isDirector && (
+          <div className='flex flex-col gap-1 min-w-[200px]'>
+            <label className='text-[11px] text-gray-500'>
+              Entreprise (toute la page)
+            </label>
+            <select
+              value={reportCompanyId}
+              onChange={(e) => {
+                setReportCompanyId(e.target.value);
+                setReportUserId('');
+                setReport(null);
+              }}
+              className='rounded-lg border border-gray-200 px-2 py-1.5 text-xs w-full sm:w-auto min-w-[180px]'
             >
-              {automationLoading
-                ? "Relance automatique…"
-                : "Lancer la relance automatique"}
-            </button>
-            {automationMessage && (
-              <span className="text-[11px] text-gray-500">
-                {automationMessage}
-              </span>
-            )}
+              <option value=''>
+                Périmètre par défaut (ma société)
+              </option>
+              {companyOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
       </section>
 
       {isManagerOrAdmin && (
-        <section className="mt-4">
-          <NeumoCard className="p-5 bg-linear-to-br from-slate-50 via-white to-indigo-50/50 border border-gray-100 shadow-neu-soft flex flex-col gap-4">
-            <p className="text-xs font-semibold text-primary">
+        <section className='mt-4'>
+          <NeumoCard className='p-5 bg-linear-to-br from-slate-50 via-white to-indigo-50/50 border border-gray-100 shadow-neu-soft flex flex-col gap-4'>
+            <p className='text-xs font-semibold text-primary'>
               Rapports (MANAGER) — Résumé des ventes
             </p>
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-end">
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-gray-500">Du</label>
+            <div className='flex flex-col sm:flex-row flex-wrap gap-3 items-end'>
+              <div className='flex flex-col gap-1'>
+                <label className='text-[11px] text-gray-500'>Du</label>
                 <input
-                  type="date"
+                  type='date'
                   value={reportFrom}
                   onChange={(e) => setReportFrom(e.target.value)}
-                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+                  className='rounded-lg border border-gray-200 px-2 py-1.5 text-xs'
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-gray-500">Au</label>
+              <div className='flex flex-col gap-1'>
+                <label className='text-[11px] text-gray-500'>Au</label>
                 <input
-                  type="date"
+                  type='date'
                   value={reportTo}
                   onChange={(e) => setReportTo(e.target.value)}
-                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+                  className='rounded-lg border border-gray-200 px-2 py-1.5 text-xs'
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-gray-500">Commercial</label>
+              <div className='flex flex-col gap-1'>
+                <label className='text-[11px] text-gray-500'>Commercial</label>
                 <select
                   value={reportUserId}
                   onChange={(e) => setReportUserId(e.target.value)}
-                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs min-w-[140px]"
+                  className='rounded-lg border border-gray-200 px-2 py-1.5 text-xs min-w-[140px]'
                 >
-                  <option value="">Tous</option>
+                  <option value=''>Tous</option>
                   {reportUsers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
@@ -342,30 +401,32 @@ function StatsPageInner() {
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-gray-500">Source (optionnel)</label>
+              <div className='flex flex-col gap-1'>
+                <label className='text-[11px] text-gray-500'>
+                  Source (optionnel)
+                </label>
                 <input
-                  type="text"
+                  type='text'
                   value={reportSource}
                   onChange={(e) => setReportSource(e.target.value)}
-                  placeholder="Ex: Site web"
-                  className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs min-w-[120px]"
+                  placeholder='Ex: Site web'
+                  className='rounded-lg border border-gray-200 px-2 py-1.5 text-xs min-w-[120px]'
                 />
               </div>
-              <div className="flex gap-2">
+              <div className='flex gap-2'>
                 <button
-                  type="button"
+                  type='button'
                   onClick={handleGenerateReport}
                   disabled={reportLoading}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 disabled:opacity-60"
+                  className='px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 disabled:opacity-60'
                 >
-                  {reportLoading ? "Génération…" : "Générer le rapport"}
+                  {reportLoading ? 'Génération…' : 'Générer le rapport'}
                 </button>
                 {report && (
                   <button
-                    type="button"
+                    type='button'
                     onClick={handleExportReport}
-                    className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5"
+                    className='px-3 py-1.5 rounded-lg border border-primary/30 text-primary text-xs font-medium hover:bg-primary/5'
                   >
                     Exporter
                   </button>
@@ -373,73 +434,99 @@ function StatsPageInner() {
               </div>
             </div>
             {reportError && (
-              <p className="text-[11px] text-red-600">{reportError}</p>
+              <p className='text-[11px] text-red-600'>{reportError}</p>
             )}
             {report && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
-                  <div className="rounded-xl border border-gray-100 bg-white p-3">
-                    <span className="text-[11px] text-gray-500">Leads</span>
-                    <p className="text-lg font-semibold text-primary">{report.global.nbLeadsTotal}</p>
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2'>
+                  <div className='rounded-xl border border-gray-100 bg-white p-3'>
+                    <span className='text-[11px] text-gray-500'>Leads</span>
+                    <p className='text-lg font-semibold text-primary'>
+                      {report.global.nbLeadsTotal}
+                    </p>
                   </div>
-                  <div className="rounded-xl border border-gray-100 bg-white p-3">
-                    <span className="text-[11px] text-gray-500">Clients</span>
-                    <p className="text-lg font-semibold text-primary">{report.global.nbClientsTotal}</p>
+                  <div className='rounded-xl border border-gray-100 bg-white p-3'>
+                    <span className='text-[11px] text-gray-500'>Clients</span>
+                    <p className='text-lg font-semibold text-primary'>
+                      {report.global.nbClientsTotal}
+                    </p>
                   </div>
-                  <div className="rounded-xl border border-gray-100 bg-white p-3">
-                    <span className="text-[11px] text-gray-500">CA</span>
-                    <p className="text-lg font-semibold text-primary">
-                      {report.global.caTotal.toLocaleString("fr-FR", {
-                        style: "currency",
-                        currency: "XOF",
+                  <div className='rounded-xl border border-gray-100 bg-white p-3'>
+                    <span className='text-[11px] text-gray-500'>CA</span>
+                    <p className='text-lg font-semibold text-primary'>
+                      {report.global.caTotal.toLocaleString('fr-FR', {
+                        style: 'currency',
+                        currency: 'XOF',
                         maximumFractionDigits: 0,
                       })}
                     </p>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <p className="text-[11px] font-medium text-gray-600 mb-2">Par commercial</p>
-                  <table className="min-w-full text-xs">
-                    <thead className="text-gray-500 border-b border-gray-100">
+                <div className='overflow-x-auto'>
+                  <p className='text-[11px] font-medium text-gray-600 mb-2'>
+                    Par commercial
+                  </p>
+                  <table className='min-w-full text-xs'>
+                    <thead className='text-gray-500 border-b border-gray-100'>
                       <tr>
-                        <th className="py-2 text-left font-medium">Commercial</th>
-                        <th className="py-2 text-right font-medium">Leads</th>
-                        <th className="py-2 text-right font-medium">Clients</th>
-                        <th className="py-2 text-right font-medium">CA</th>
-                        <th className="py-2 text-right font-medium">Taux conversion</th>
+                        <th className='py-2 text-left font-medium'>
+                          Commercial
+                        </th>
+                        <th className='py-2 text-right font-medium'>Leads</th>
+                        <th className='py-2 text-right font-medium'>Clients</th>
+                        <th className='py-2 text-right font-medium'>CA</th>
+                        <th className='py-2 text-right font-medium'>
+                          Taux conversion
+                        </th>
                       </tr>
                     </thead>
-                    <tbody className="text-gray-700">
+                    <tbody className='text-gray-700'>
                       {report.byUser.map((r) => (
-                        <tr key={r.userId} className="border-b border-gray-50 hover:bg-gray-50/60">
-                          <td className="py-2 font-medium">{r.userName}</td>
-                          <td className="py-2 text-right">{r.nbLeads}</td>
-                          <td className="py-2 text-right">{r.nbClients}</td>
-                          <td className="py-2 text-right">
-                            {r.caTotal.toLocaleString("fr-FR", { style: "currency", currency: "XOF", maximumFractionDigits: 0 })}
+                        <tr
+                          key={r.userId}
+                          className='border-b border-gray-50 hover:bg-gray-50/60'
+                        >
+                          <td className='py-2 font-medium'>{r.userName}</td>
+                          <td className='py-2 text-right'>{r.nbLeads}</td>
+                          <td className='py-2 text-right'>{r.nbClients}</td>
+                          <td className='py-2 text-right'>
+                            {r.caTotal.toLocaleString('fr-FR', {
+                              style: 'currency',
+                              currency: 'XOF',
+                              maximumFractionDigits: 0,
+                            })}
                           </td>
-                          <td className="py-2 text-right">{r.conversionRate.toFixed(1)} %</td>
+                          <td className='py-2 text-right'>
+                            {r.conversionRate.toFixed(1)} %
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <div className="overflow-x-auto">
-                  <p className="text-[11px] font-medium text-gray-600 mb-2">Par source</p>
-                  <table className="min-w-full text-xs">
-                    <thead className="text-gray-500 border-b border-gray-100">
+                <div className='overflow-x-auto'>
+                  <p className='text-[11px] font-medium text-gray-600 mb-2'>
+                    Par source
+                  </p>
+                  <table className='min-w-full text-xs'>
+                    <thead className='text-gray-500 border-b border-gray-100'>
                       <tr>
-                        <th className="py-2 text-left font-medium">Source</th>
-                        <th className="py-2 text-right font-medium">Leads</th>
-                        <th className="py-2 text-right font-medium">Clients</th>
+                        <th className='py-2 text-left font-medium'>Source</th>
+                        <th className='py-2 text-right font-medium'>Leads</th>
+                        <th className='py-2 text-right font-medium'>Clients</th>
                       </tr>
                     </thead>
-                    <tbody className="text-gray-700">
+                    <tbody className='text-gray-700'>
                       {report.bySource.map((r, i) => (
-                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/60">
-                          <td className="py-2 font-medium">{r.source ?? "Inconnu"}</td>
-                          <td className="py-2 text-right">{r.nbLeads}</td>
-                          <td className="py-2 text-right">{r.nbClients}</td>
+                        <tr
+                          key={i}
+                          className='border-b border-gray-50 hover:bg-gray-50/60'
+                        >
+                          <td className='py-2 font-medium'>
+                            {r.source ?? 'Inconnu'}
+                          </td>
+                          <td className='py-2 text-right'>{r.nbLeads}</td>
+                          <td className='py-2 text-right'>{r.nbClients}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -452,22 +539,22 @@ function StatsPageInner() {
       )}
 
       {isManagerOrAdmin && (
-        <section className="mt-4">
-          <NeumoCard className="p-5 bg-linear-to-br from-violet-50 via-indigo-50/70 to-primary/5 border border-indigo-100 shadow-neu-soft flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-primary">
+        <section className='mt-4'>
+          <NeumoCard className='p-5 bg-linear-to-br from-violet-50 via-indigo-50/70 to-primary/5 border border-indigo-100 shadow-neu-soft flex flex-col gap-4'>
+            <div className='flex items-center justify-between gap-2'>
+              <p className='text-xs font-semibold text-primary'>
                 Objectifs en cours par commercial
               </p>
               {loadingCurrentGoals && (
-                <span className="text-[11px] text-gray-400">Chargement…</span>
+                <span className='text-[11px] text-gray-400'>Chargement…</span>
               )}
             </div>
             {currentGoalsByUser.length === 0 && !loadingCurrentGoals ? (
-              <p className="text-[11px] text-gray-100">
+              <p className='text-[11px] text-gray-100'>
                 Aucun objectif en cours pour cette période dans votre équipe.
               </p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
                 {currentGoalsByUser.map((g, idx) => {
                   const convRatio =
                     g.targetConversions > 0
@@ -481,66 +568,66 @@ function StatsPageInner() {
                   const revPct = Math.min(100, revRatio * 100);
 
                   const ratioToColor = (ratio: number) => {
-                    if (ratio >= 1) return "bg-emerald-500";
-                    if (ratio >= 0.5) return "bg-amber-500";
-                    return "bg-rose-500";
+                    if (ratio >= 1) return 'bg-emerald-500';
+                    if (ratio >= 0.5) return 'bg-amber-500';
+                    return 'bg-rose-500';
                   };
 
                   const cardBg =
                     idx % 3 === 0
-                      ? "from-white/90 via-indigo-50/80 to-violet-50/90 border-indigo-100/70"
+                      ? 'from-white/90 via-indigo-50/80 to-violet-50/90 border-indigo-100/70'
                       : idx % 3 === 1
-                      ? "from-white/90 via-emerald-50/80 to-teal-50/90 border-emerald-100/70"
-                      : "from-white/90 via-amber-50/80 to-orange-50/90 border-amber-100/70";
+                        ? 'from-white/90 via-emerald-50/80 to-teal-50/90 border-emerald-100/70'
+                        : 'from-white/90 via-amber-50/80 to-orange-50/90 border-amber-100/70';
 
                   return (
                     <div
                       key={g.user.id}
                       className={`flex flex-col gap-3 text-[11px] rounded-2xl border shadow-neu-soft bg-linear-to-br ${cardBg} p-3`}
                     >
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-primary">
+                      <div className='flex flex-col'>
+                        <span className='font-semibold text-primary'>
                           {g.user.name}
                         </span>
-                        <span className="text-gray-500">{g.periodLabel}</span>
+                        <span className='text-gray-500'>{g.periodLabel}</span>
                       </div>
-                        <div className="flex flex-col gap-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Conversions</span>
-                          <span className="font-medium text-gray-700">
+                      <div className='flex flex-col gap-1'>
+                        <div className='flex justify-between'>
+                          <span className='text-gray-500'>Conversions</span>
+                          <span className='font-medium text-gray-700'>
                             {g.realizedConversions} / {g.targetConversions}
                           </span>
                         </div>
-                        <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                        <div className='h-2.5 rounded-full bg-gray-200 overflow-hidden'>
                           <div
                             className={`h-full rounded-full ${ratioToColor(
-                              convRatio
+                              convRatio,
                             )} transition-all`}
                             style={{ width: `${convPct}%` }}
                           />
                         </div>
                       </div>
-                        <div className="flex flex-col gap-1">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">CA</span>
-                          <span className="font-medium text-gray-700">
-                            {g.realizedRevenue.toLocaleString("fr-FR", {
-                              style: "currency",
-                              currency: "XOF",
+                      <div className='flex flex-col gap-1'>
+                        <div className='flex justify-between'>
+                          <span className='text-gray-500'>CA</span>
+                          <span className='font-medium text-gray-700'>
+                            {g.realizedRevenue.toLocaleString('fr-FR', {
+                              style: 'currency',
+                              currency: 'XOF',
                               maximumFractionDigits: 0,
-                            })}{" "}
-                            /{" "}
-                            {g.targetRevenue.toLocaleString("fr-FR", {
-                              style: "currency",
-                              currency: "XOF",
+                            })}{' '}
+                            /{' '}
+                            {g.targetRevenue.toLocaleString('fr-FR', {
+                              style: 'currency',
+                              currency: 'XOF',
                               maximumFractionDigits: 0,
                             })}
                           </span>
                         </div>
-                        <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                        <div className='h-2.5 rounded-full bg-gray-200 overflow-hidden'>
                           <div
                             className={`h-full rounded-full ${ratioToColor(
-                              revRatio
+                              revRatio,
                             )} transition-all`}
                             style={{ width: `${revPct}%` }}
                           />
@@ -556,26 +643,26 @@ function StatsPageInner() {
       )}
 
       {isAgent && (
-        <section className="mt-4">
+        <section className='mt-4'>
           {currentPeriodGoal ? (
-            <NeumoCard className="p-5 bg-[#f5f5ff] border-2 border-primary/20">
-              <p className="text-xs font-semibold text-primary mb-3">
+            <NeumoCard className='p-5 bg-[#f5f5ff] border-2 border-primary/20'>
+              <p className='text-xs font-semibold text-primary mb-3'>
                 Mon objectif ({currentPeriodGoal.periodLabel})
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="flex flex-col gap-2">
-                  <span className="text-gray-500">Conversions</span>
-                  <p className="font-semibold text-primary">
-                    {currentPeriodGoal.realizedConversions} /{" "}
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs'>
+                <div className='flex flex-col gap-2'>
+                  <span className='text-gray-500'>Conversions</span>
+                  <p className='font-semibold text-primary'>
+                    {currentPeriodGoal.realizedConversions} /{' '}
                     {currentPeriodGoal.targetConversions}
                     {currentPeriodGoal.realizedConversions >=
                       currentPeriodGoal.targetConversions && (
-                      <span className="text-emerald-600 ml-1">✓</span>
+                      <span className='text-emerald-600 ml-1'>✓</span>
                     )}
                   </p>
-                  <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div className='h-2 rounded-full bg-gray-200 overflow-hidden'>
                     <div
-                      className="h-full rounded-full bg-primary transition-all"
+                      className='h-full rounded-full bg-primary transition-all'
                       style={{
                         width: `${
                           currentPeriodGoal.targetConversions > 0
@@ -583,7 +670,7 @@ function StatsPageInner() {
                                 100,
                                 (currentPeriodGoal.realizedConversions /
                                   currentPeriodGoal.targetConversions) *
-                                  100
+                                  100,
                               )
                             : 0
                         }%`,
@@ -591,28 +678,28 @@ function StatsPageInner() {
                     />
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-gray-500">CA</span>
-                  <p className="font-semibold text-primary">
-                    {currentPeriodGoal.realizedRevenue.toLocaleString("fr-FR", {
-                      style: "currency",
-                      currency: "XOF",
+                <div className='flex flex-col gap-2'>
+                  <span className='text-gray-500'>CA</span>
+                  <p className='font-semibold text-primary'>
+                    {currentPeriodGoal.realizedRevenue.toLocaleString('fr-FR', {
+                      style: 'currency',
+                      currency: 'XOF',
                       maximumFractionDigits: 0,
-                    })}{" "}
-                    /{" "}
-                    {currentPeriodGoal.targetRevenue.toLocaleString("fr-FR", {
-                      style: "currency",
-                      currency: "XOF",
+                    })}{' '}
+                    /{' '}
+                    {currentPeriodGoal.targetRevenue.toLocaleString('fr-FR', {
+                      style: 'currency',
+                      currency: 'XOF',
                       maximumFractionDigits: 0,
                     })}
                     {currentPeriodGoal.realizedRevenue >=
                       currentPeriodGoal.targetRevenue && (
-                      <span className="text-emerald-600 ml-1">✓</span>
+                      <span className='text-emerald-600 ml-1'>✓</span>
                     )}
                   </p>
-                  <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div className='h-2 rounded-full bg-gray-200 overflow-hidden'>
                     <div
-                      className="h-full rounded-full bg-primary transition-all"
+                      className='h-full rounded-full bg-primary transition-all'
                       style={{
                         width: `${
                           currentPeriodGoal.targetRevenue > 0
@@ -620,7 +707,7 @@ function StatsPageInner() {
                                 100,
                                 (currentPeriodGoal.realizedRevenue /
                                   currentPeriodGoal.targetRevenue) *
-                                  100
+                                  100,
                               )
                             : 0
                         }%`,
@@ -631,11 +718,11 @@ function StatsPageInner() {
               </div>
             </NeumoCard>
           ) : goals.length > 0 ? (
-            <NeumoCard className="p-5 bg-white">
-              <p className="text-xs font-semibold text-primary mb-2">
+            <NeumoCard className='p-5 bg-white'>
+              <p className='text-xs font-semibold text-primary mb-2'>
                 Mes objectifs
               </p>
-              <p className="text-[11px] text-gray-500">
+              <p className='text-[11px] text-gray-500'>
                 Aucun objectif pour la période en cours. Consultez le tableau
                 ci-dessous pour l’historique.
               </p>
@@ -645,10 +732,12 @@ function StatsPageInner() {
       )}
 
       {loading ? (
-        <div className="mt-4 text-sm text-gray-500">Chargement des objectifs…</div>
+        <div className='mt-4 text-sm text-gray-500'>
+          Chargement des objectifs…
+        </div>
       ) : goals.length === 0 ? (
-        <NeumoCard className="mt-4 p-5 bg-white">
-          <p className="text-sm text-gray-500">
+        <NeumoCard className='mt-4 p-5 bg-white'>
+          <p className='text-sm text-gray-500'>
             Aucun objectif défini. Les managers et admins peuvent définir des
             objectifs depuis la page Utilisateurs (action « Définir objectif »
             sur un commercial).
@@ -656,119 +745,119 @@ function StatsPageInner() {
         </NeumoCard>
       ) : (
         <>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <NeumoCard className="p-4 bg-linear-to-br from-primary/5 via-white to-indigo-50 flex flex-col gap-2 border border-primary/10 shadow-neu-soft">
-              <span className="text-[11px] text-gray-500 flex items-center gap-1">
-                <Target className="w-3.5 h-3.5" />
+          <div className='mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'>
+            <NeumoCard className='p-4 bg-linear-to-br from-primary/5 via-white to-indigo-50 flex flex-col gap-2 border border-primary/10 shadow-neu-soft'>
+              <span className='text-[11px] text-gray-500 flex items-center gap-1'>
+                <Target className='w-3.5 h-3.5' />
                 Objectifs définis
               </span>
-              <span className="text-2xl font-semibold text-primary">
+              <span className='text-2xl font-semibold text-primary'>
                 {goals.length}
               </span>
-              <span className="text-[11px] text-gray-400">
+              <span className='text-[11px] text-gray-400'>
                 Périodes avec objectif conversions + CA
               </span>
             </NeumoCard>
-            <NeumoCard className="p-4 bg-linear-to-br from-emerald-50 via-white to-teal-50 flex flex-col gap-2 border border-emerald-100 shadow-neu-soft">
-              <span className="text-[11px] text-gray-500 flex items-center gap-1">
-                <Users className="w-3.5 h-3.5" />
+            <NeumoCard className='p-4 bg-linear-to-br from-emerald-50 via-white to-teal-50 flex flex-col gap-2 border border-emerald-100 shadow-neu-soft'>
+              <span className='text-[11px] text-gray-500 flex items-center gap-1'>
+                <Users className='w-3.5 h-3.5' />
                 Commerciaux concernés
               </span>
-              <span className="text-2xl font-semibold text-primary">
+              <span className='text-2xl font-semibold text-primary'>
                 {new Set(goals.map((g) => g.user.id)).size}
               </span>
-              <span className="text-[11px] text-gray-400">
+              <span className='text-[11px] text-gray-400'>
                 Avec au moins un objectif
               </span>
             </NeumoCard>
-            <NeumoCard className="p-4 bg-linear-to-br from-amber-50 via-white to-orange-50 flex flex-col gap-2 border border-amber-100 shadow-neu-soft">
-              <span className="text-[11px] text-gray-500 flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5" />
+            <NeumoCard className='p-4 bg-linear-to-br from-amber-50 via-white to-orange-50 flex flex-col gap-2 border border-amber-100 shadow-neu-soft'>
+              <span className='text-[11px] text-gray-500 flex items-center gap-1'>
+                <TrendingUp className='w-3.5 h-3.5' />
                 Conversions (total réalisé)
               </span>
-              <span className="text-2xl font-semibold text-primary">
+              <span className='text-2xl font-semibold text-primary'>
                 {goals.reduce((s, g) => s + g.realizedConversions, 0)}
               </span>
-              <span className="text-[11px] text-gray-400">
-                Objectif total :{" "}
+              <span className='text-[11px] text-gray-400'>
+                Objectif total :{' '}
                 {goals.reduce((s, g) => s + g.targetConversions, 0)}
               </span>
             </NeumoCard>
           </div>
 
-          <NeumoCard className="mt-6 p-5 bg-linear-to-br from-[#f7f7fb] via-white to-indigo-50/40 flex flex-col gap-4 border border-gray-100 shadow-neu-soft">
-            <p className="text-xs font-semibold text-primary">
+          <NeumoCard className='mt-6 p-5 bg-linear-to-br from-[#f7f7fb] via-white to-indigo-50/40 flex flex-col gap-4 border border-gray-100 shadow-neu-soft'>
+            <p className='text-xs font-semibold text-primary'>
               {isManagerOrAdmin
-                ? "Objectifs par commercial et par période"
-                : "Mes objectifs (toutes périodes)"}
+                ? 'Objectifs par commercial et par période'
+                : 'Mes objectifs (toutes périodes)'}
             </p>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="text-gray-500 border-b border-gray-100">
+            <div className='overflow-x-auto'>
+              <table className='min-w-full text-xs'>
+                <thead className='text-gray-500 border-b border-gray-100'>
                   <tr>
                     {isManagerOrAdmin && (
-                      <th className="py-2 text-left font-medium">Commercial</th>
+                      <th className='py-2 text-left font-medium'>Commercial</th>
                     )}
-                    <th className="py-2 text-left font-medium">Période</th>
-                    <th className="py-2 text-right font-medium">
+                    <th className='py-2 text-left font-medium'>Période</th>
+                    <th className='py-2 text-right font-medium'>
                       Conversions (réalisé / objectif)
                     </th>
-                    <th className="py-2 text-right font-medium">
+                    <th className='py-2 text-right font-medium'>
                       CA (réalisé / objectif)
                     </th>
                     {isManagerOrAdmin && (
-                      <th className="py-2 text-right font-medium">Actions</th>
+                      <th className='py-2 text-right font-medium'>Actions</th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="text-gray-700">
+                <tbody className='text-gray-700'>
                   {goals.map((g) => (
                     <tr
                       key={g.id}
-                      className="border-b border-gray-50 hover:bg-gray-50/60"
+                      className='border-b border-gray-50 hover:bg-gray-50/60'
                     >
                       {isManagerOrAdmin && (
-                        <td className="py-2.5 font-medium">{g.user.name}</td>
+                        <td className='py-2.5 font-medium'>{g.user.name}</td>
                       )}
-                      <td className="py-2.5">{g.periodLabel}</td>
-                      <td className="py-2.5 text-right">
+                      <td className='py-2.5'>{g.periodLabel}</td>
+                      <td className='py-2.5 text-right'>
                         <span
                           className={
                             g.realizedConversions >= g.targetConversions
-                              ? "text-emerald-600 font-medium"
-                              : ""
+                              ? 'text-emerald-600 font-medium'
+                              : ''
                           }
                         >
                           {g.realizedConversions}
                         </span>
-                        <span className="text-gray-400"> / </span>
+                        <span className='text-gray-400'> / </span>
                         <span>{g.targetConversions}</span>
                       </td>
-                      <td className="py-2.5 text-right">
+                      <td className='py-2.5 text-right'>
                         <span
                           className={
                             g.realizedRevenue >= g.targetRevenue
-                              ? "text-emerald-600 font-medium"
-                              : ""
+                              ? 'text-emerald-600 font-medium'
+                              : ''
                           }
                         >
-                          {g.realizedRevenue.toLocaleString("fr-FR", {
-                            style: "currency",
-                            currency: "XOF",
+                          {g.realizedRevenue.toLocaleString('fr-FR', {
+                            style: 'currency',
+                            currency: 'XOF',
                             maximumFractionDigits: 0,
                           })}
                         </span>
-                        <span className="text-gray-400"> / </span>
+                        <span className='text-gray-400'> / </span>
                         <span>
-                          {g.targetRevenue.toLocaleString("fr-FR", {
-                            style: "currency",
-                            currency: "XOF",
+                          {g.targetRevenue.toLocaleString('fr-FR', {
+                            style: 'currency',
+                            currency: 'XOF',
                             maximumFractionDigits: 0,
                           })}
                         </span>
                       </td>
                       {isManagerOrAdmin && (
-                        <td className="py-2.5 text-right">
+                        <td className='py-2.5 text-right'>
                           {(() => {
                             const now = new Date();
                             const end = new Date(g.periodEnd);
@@ -787,10 +876,10 @@ function StatsPageInner() {
 
                             return (
                               <button
-                                type="button"
+                                type='button'
                                 onClick={() => handleRenew(g)}
                                 disabled={renewingId === g.id}
-                                className="inline-flex items-center px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/15 disabled:opacity-50"
+                                className='inline-flex items-center px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/15 disabled:opacity-50'
                               >
                                 Reconduire
                               </button>

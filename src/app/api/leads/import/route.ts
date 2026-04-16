@@ -22,6 +22,7 @@ const importRowSchema = z.object({
   lastName: z.string().optional(),
   receivedBy: z.string().optional(),
   domain: z.string().optional(),
+  jobTitle: z.string().optional(),
   location: z.string().optional(),
   observation: z.string().optional(),
   civility: z.string().optional(),
@@ -61,7 +62,6 @@ export async function POST(req: Request) {
     }
 
     const json = await req.json();
-    console.log('🚀 ~ POST ~ json:', json);
     // 1) Validation du corps JSON (provenant du parsing Excel côté client)
     const { leads: rows } = importBodySchema.parse(json);
 
@@ -112,6 +112,8 @@ export async function POST(req: Request) {
             activityDomain: row.domain?.trim() || null,
             // nom de la compagnie \"à plat\" sur le lead
             companyName,
+            // poste / fonction du prospect dans son entreprise
+            jobTitle: row.jobTitle?.trim() || null,
             // localisation utile pour la carte
             location: row.location?.trim() || null,
             // observation envoyée dans les notes du lead
@@ -119,9 +121,20 @@ export async function POST(req: Request) {
             // civilité (M., Mme, etc.) si présente dans l'Excel
             civility: row.civility?.trim() || null,
             status: 'NEW',
-            assignedTo: row.receivedBy?.trim() || null,
+            // Traçabilité: le commercial/utilisateur qui importe devient l'assigné.
+            assignedTo: user.id,
             // L'import est toujours rattaché à la société de l'utilisateur connecté.
             companyId: user.companyId,
+          },
+        });
+
+        await prisma.activity.create({
+          data: {
+            type: 'NOTE',
+            relatedTo: lead.id,
+            leadId: lead.id,
+            userId: user.id,
+            content: `Lead importé via Excel par ${user.name} (${user.email}).`,
           },
         });
         created.push({

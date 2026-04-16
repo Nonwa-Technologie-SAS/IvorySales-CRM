@@ -14,6 +14,7 @@ type AgendaStatus = "TODO" | "IN_PROGRESS" | "DONE";
 interface AgendaItem {
   id: string;
   leadId: string;
+  createdBy?: { id: string; name: string } | null;
   title: string;
   description?: string | null;
   dueDate: string;
@@ -215,6 +216,11 @@ export default function AgendaTab({ leadId }: AgendaTabProps) {
                       {formatDate(item.dueDate)}
                     </span>
                   </div>
+                  {item.createdBy?.name && (
+                    <p className="mt-0.5 text-[10px] text-gray-500">
+                      Créée par {item.createdBy.name}
+                    </p>
+                  )}
                   {item.description && (
                     <p className="mt-0.5 line-clamp-2 text-[10px] text-gray-500">
                       {item.description}
@@ -349,6 +355,11 @@ export default function AgendaTab({ leadId }: AgendaTabProps) {
                   <p className="text-[10px] text-gray-500">
                     Terminée le {formatDate(item.dueDate)}
                   </p>
+                  {item.createdBy?.name && (
+                    <p className="text-[10px] text-gray-500">
+                      Créée par {item.createdBy.name}
+                    </p>
+                  )}
                 </div>
               </li>
             ))}

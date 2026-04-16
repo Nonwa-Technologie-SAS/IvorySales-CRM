@@ -11,7 +11,7 @@ interface UserCreateSheetProps {
     id: string;
     name: string;
     email: string;
-    role: "admin" | "manager" | "agent";
+    role: "admin" | "manager" | "directrice_commerciale" | "agent";
   }) => void;
 }
 
@@ -20,7 +20,7 @@ export default function UserCreateSheet({
   onClose,
   onCreated,
 }: UserCreateSheetProps) {
-  const [role, setRole] = useState<"admin" | "manager" | "agent">("agent");
+  const [role, setRole] = useState<"admin" | "manager" | "directrice_commerciale" | "agent">("agent");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +45,7 @@ export default function UserCreateSheet({
           name,
           email,
           password,
-          role: role.toUpperCase(), // API attend ADMIN | MANAGER | AGENT
+          role: role.toUpperCase(), // API attend ADMIN | MANAGER | DIRECTRICE_COMMERCIALE | AGENT
         }),
       });
 
@@ -133,6 +133,7 @@ export default function UserCreateSheet({
                   {([
                     ["agent", "Commercial"],
                     ["manager", "Manager"],
+                    ["directrice_commerciale", "Directrice commerciale"],
                     ["admin", "Admin"],
                   ] as const).map(([value, label]) => (
                     <button

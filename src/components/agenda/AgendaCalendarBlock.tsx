@@ -12,6 +12,7 @@ export interface CalendarEvent {
   end: Date;
   leadId?: string;
   leadName?: string;
+  createdByName?: string;
   status?: string;
   description?: string | null;
 }
@@ -23,6 +24,12 @@ interface AgendaCalendarBlockProps {
   /** Quand view === "période", plage personnalisée définie par le commercial */
   customRange?: CustomPeriod;
   onCustomRangeChange?: (range: CustomPeriod) => void;
+  /** Directrice : périmètre entreprise (optionnel, aligné /api/leads) */
+  filterCompanyId?: string;
+  /** Filtrer les tâches sur un commercial (leads assignés à cet utilisateur) */
+  filterAssignedUserId?: string;
+  /** Si true : pas d'appel API (ex. directrice sans commercial sélectionné) */
+  blockFetch?: boolean;
 }
 
 /**
@@ -35,6 +42,9 @@ export default function AgendaCalendarBlock({
   onCurrentDateChange,
   customRange,
   onCustomRangeChange,
+  filterCompanyId = "",
+  filterAssignedUserId = "",
+  blockFetch = false,
 }: AgendaCalendarBlockProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,17 +72,31 @@ export default function AgendaCalendarBlock({
   }, [view, currentDate, customRange]);
 
   useEffect(() => {
+    if (blockFetch) {
+      setEvents([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     const { from, to } = getRange();
     setLoading(true);
     setError(null);
-    fetch(
-      `/api/agenda/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`
-    )
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+    if (filterAssignedUserId.trim()) {
+      params.set("userId", filterAssignedUserId.trim());
+    }
+    if (filterCompanyId.trim()) {
+      params.set("companyId", filterCompanyId.trim());
+    }
+    fetch(`/api/agenda/calendar?${params.toString()}`)
       .then((res) => {
         if (!res.ok) throw new Error("Erreur chargement calendrier");
         return res.json();
       })
-      .then((data: Array<{ id: string; title: string; dueDate: string; description?: string | null; status: string; lead?: { id: string; firstName: string; lastName: string; company?: { name: string } } }>) => {
+      .then((data: Array<{ id: string; title: string; dueDate: string; description?: string | null; status: string; createdBy?: { id: string; name: string } | null; lead?: { id: string; firstName: string; lastName: string; company?: { name: string } } }>) => {
         const mapped: CalendarEvent[] = data.map((item) => {
           const start = new Date(item.dueDate);
           const end = addHours(start, 1);
@@ -83,6 +107,7 @@ export default function AgendaCalendarBlock({
             end,
             leadId: item.lead?.id,
             leadName: item.lead ? `${item.lead.firstName} ${item.lead.lastName}` : undefined,
+            createdByName: item.createdBy?.name ?? undefined,
             status: item.status,
             description: item.description,
           };
@@ -91,7 +116,7 @@ export default function AgendaCalendarBlock({
       })
       .catch(() => setError("Impossible de charger les tâches."))
       .finally(() => setLoading(false));
-  }, [getRange]);
+  }, [getRange, filterCompanyId, filterAssignedUserId, blockFetch]);
 
   const goPrev = () => {
     if (view === "période" && customRange && onCustomRangeChange) {
@@ -170,7 +195,11 @@ export default function AgendaCalendarBlock({
 
       {/* Liste des tâches selon la période */}
       <div className="min-h-[280px] rounded-2xl bg-white/70 border border-gray-100 p-3">
-        {loading ? (
+        {blockFetch ? (
+          <p className="text-xs text-gray-500 py-4">
+            Sélectionnez une entreprise puis une commerciale pour afficher son agenda.
+          </p>
+        ) : loading ? (
           <p className="text-xs text-gray-500 py-4">Chargement des tâches...</p>
         ) : error ? (
           <p className="text-xs text-rose-600 py-4">{error}</p>
@@ -190,6 +219,11 @@ export default function AgendaCalendarBlock({
                   <p className="font-medium text-gray-800">{ev.title}</p>
                   {ev.leadName && (
                     <p className="text-[10px] text-gray-500 mt-0.5">Prospect : {ev.leadName}</p>
+                  )}
+                  {ev.createdByName && (
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      Créée par : {ev.createdByName}
+                    </p>
                   )}
                   {ev.description && (
                     <p className="text-[10px] text-gray-400 line-clamp-2 mt-0.5">{ev.description}</p>

@@ -15,6 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
+import { isAdminOrManagerLike } from "@/lib/roles";
 
 type SettingsTab = "organization" | "legal";
 
@@ -68,7 +69,7 @@ function SettingsPageInner() {
     },
   ];
   const visibleTabs =
-    authUser && (authUser.role === "admin" || authUser.role === "manager")
+    authUser && isAdminOrManagerLike(authUser.role)
       ? tabs
       : tabs.filter((t) => !t.adminOnly);
 

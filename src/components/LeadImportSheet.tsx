@@ -26,6 +26,8 @@ export interface ImportRow {
   receivedBy?: string;
   /** Domaine d'activités (colonne Domaine d'activités) */
   domain?: string;
+  /** Poste / fonction dans l'entreprise */
+  jobTitle?: string;
   /** Adresse / localisation (colonne Situation géographique, Localisation, etc.) */
   location?: string;
   /** Observation / notes libres */
@@ -118,6 +120,13 @@ function classifyHeader(normalized: string): keyof ImportRow | undefined {
   }
   if (normalized.includes('domaine') || normalized.includes('activite')) {
     return 'domain';
+  }
+  if (
+    normalized.includes('poste') ||
+    normalized.includes('fonction') ||
+    normalized.includes('jobtitle')
+  ) {
+    return 'jobTitle';
   }
   if (
     normalized.includes('situationgeographique') ||
@@ -230,29 +239,29 @@ export default function LeadImportSheet({
       const XLSX = await import('xlsx');
 
       const headerRow = [
-        "Domaine d'activités",
-        "Nom de l'entreprise",
-        'Contact',
-        'Situation géographique',
-        'Reçu par',
-        'Observation',
         'Civilité',
-        'Email',
         'Nom',
         'Prenoms',
+        'Contact',
+        'Email',
+        "Nom de l'entreprise",
+        'Poste / Fonction',
+        "Domaine d'activités",
+        'Situation géographique',
+        'Observation',
       ];
 
       const exampleRow = [
-        'Informatique / SaaS',
-        'Acme Corp',
-        '+225 01 23 45 67',
-        'Abidjan, Cocody',
-        'Jean Dupont',
-        'Client rencontré au salon X',
         'M.',
-        'contact@acme.ci',
         'Dupont',
         'Jean',
+        '+225 01 23 45 67',
+        'contact@acme.ci',
+        'Acme Corp',
+        'Directeur commercial',
+        'Informatique / SaaS',
+        'Abidjan, Cocody',
+        'Client rencontré au salon X',
       ];
 
       const wb = XLSX.utils.book_new();
@@ -284,7 +293,7 @@ export default function LeadImportSheet({
       const parsed = await parseExcelFile(file);
       if (parsed.length === 0) {
         setError(
-          "Aucune ligne trouvée. Vérifiez les en-têtes : Domaine d'activités, Nom de l'entreprise, Contact, Situation Géographique, reçu par, observation.",
+          "Aucune ligne trouvée. Vérifiez les en-têtes : Civilité, Nom, Prenoms, Contact, Email, Nom de l'entreprise, Poste / Fonction, Domaine d'activités, Situation géographique, Observation.",
         );
         setRows([]);
       } else {
@@ -354,9 +363,9 @@ export default function LeadImportSheet({
           <SheetDescription>
             Vous pouvez d&apos;abord télécharger le modèle Excel, le remplir
             avec vos prospects, puis l&apos;importer ici. Colonnes attendues :
-            Domaine d&apos;activités, Nom de l&apos;entreprise, Contact
-            (téléphone), Situation géographique, Reçu par, Observation,
-            Civilité, Email, Nom, Prenoms.
+            Civilité, Nom, Prenoms, Contact (téléphone), Email, Nom de
+            l&apos;entreprise, Poste / Fonction, Domaine d&apos;activités,
+            Situation géographique, Observation.
           </SheetDescription>
         </SheetHeader>
 
@@ -425,7 +434,6 @@ export default function LeadImportSheet({
                     <TableRow className='border-b border-gray-100'>
                       <TableHead className='text-[10px]'>Entreprise</TableHead>
                       <TableHead className='text-[10px]'>Contact</TableHead>
-                      <TableHead className='text-[10px]'>Reçu par</TableHead>
                       <TableHead className='text-[10px]'>Lieu</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -437,9 +445,6 @@ export default function LeadImportSheet({
                         </TableCell>
                         <TableCell className='py-1.5 text-[11px]'>
                           {r.phone ?? '—'}
-                        </TableCell>
-                        <TableCell className='py-1.5 text-[11px]'>
-                          {r.receivedBy ?? '—'}
                         </TableCell>
                         <TableCell className='py-1.5 text-[11px]'>
                           {r.location ?? '—'}

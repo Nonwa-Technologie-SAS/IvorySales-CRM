@@ -1,5 +1,10 @@
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import {
+  agentCanModifyLead,
+  getLegacyUnassignedLeadIdsForAgent,
+  getLeadIdsWithActivitySinceInCompany,
+} from '@/lib/agentLegacyLeadAccess';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -12,6 +17,7 @@ const createLeadSchema = z.object({
   civility: z.string().optional(),
   activityDomain: z.string().optional(),
   companyName: z.string().optional(),
+  jobTitle: z.string().optional(),
   location: z.string().optional(),
   notes: z.string().optional(),
   // on reste aligné avec l'enum LeadStatus du schema Prisma
@@ -35,6 +41,7 @@ const updateLeadSchema = z.object({
   civility: z.string().optional(),
   activityDomain: z.string().optional(),
   companyName: z.string().optional(),
+  jobTitle: z.string().optional(),
   location: z.string().optional(),
   notes: z.string().optional(),
   status: z
@@ -59,6 +66,7 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
+    const companyIdParam = url.searchParams.get('companyId');
     const statusParam = url.searchParams.get('status');
     const sourceParam = url.searchParams.get('source');
     const assignedToParam = url.searchParams.get('assignedTo');
@@ -68,8 +76,37 @@ export async function GET(req: Request) {
     const takeParam = url.searchParams.get('take');
     const skipParam = url.searchParams.get('skip');
 
-    const where: any = { companyId: user.companyId };
+    // Par défaut: isolation par entreprise
+    // Exception: DIRECTRICE_COMMERCIALE peut lire d'autres entreprises via companyId=...
+    let effectiveCompanyId = user.companyId;
+    if (user.role === 'DIRECTRICE_COMMERCIALE' && companyIdParam) {
+      const exists = await prisma.company.findUnique({
+        where: { id: companyIdParam },
+        select: { id: true },
+      });
+      if (!exists) {
+        return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 400 });
+      }
+      effectiveCompanyId = companyIdParam;
+    }
+
+    const where: any = { companyId: effectiveCompanyId };
     const andConditions: any[] = [];
+
+    // Legacy transition: AGENT voit ses leads assignés + leads non assignés dont la première
+    // activité de création/import (leadId OU relatedTo) est la sienne.
+    if (user.role === 'AGENT') {
+      const legacyIds = await getLegacyUnassignedLeadIdsForAgent(
+        effectiveCompanyId,
+        user.id,
+      );
+      andConditions.push({
+        OR: [
+          { assignedTo: user.id },
+          ...(legacyIds.length ? [{ id: { in: legacyIds } }] : []),
+        ],
+      });
+    }
 
     if (statusParam) {
       const statuses = statusParam
@@ -88,8 +125,12 @@ export async function GET(req: Request) {
       };
     }
 
-    if (assignedToParam) {
+    // Filtre commercial : réservé aux rôles non-AGENT (un AGENT est déjà limité à lui-même).
+    if (assignedToParam && user.role !== 'AGENT') {
       where.assignedTo = assignedToParam;
+    }
+    if (!assignedToParam && user.role !== 'AGENT') {
+      where.assignedTo = '';
     }
 
     if (createdFromParam || createdToParam) {
@@ -117,18 +158,16 @@ export async function GET(req: Request) {
     if (Number.isFinite(staleDays) && staleDays > 0) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - staleDays);
-      // Leads sans activité récente : aucune activité avec date >= cutoff
-      andConditions.push({
-        NOT: {
-          activities: {
-            some: {
-              date: {
-                gte: cutoff,
-              },
-            },
-          },
-        },
-      });
+      // Sans activité récente (leadId OU relatedTo), cohérent avec les activités legacy.
+      const withRecent = await getLeadIdsWithActivitySinceInCompany(
+        effectiveCompanyId,
+        cutoff,
+      );
+      if (withRecent.length) {
+        andConditions.push({
+          NOT: { id: { in: withRecent } },
+        });
+      }
     }
 
     if (andConditions.length) {
@@ -186,10 +225,12 @@ export async function POST(req: Request) {
         civility: body.civility,
         activityDomain: body.activityDomain,
         companyName: body.companyName,
+        jobTitle: body.jobTitle,
         location: body.location,
         notes: body.notes,
         status: body.status,
-        assignedTo: body.assignedTo,
+        // Traçabilité: si aucun commercial n'est spécifié, on attribue au créateur.
+        assignedTo: body.assignedTo ?? user.id,
         products: body.productIds && body.productIds.length
           ? {
               connect: body.productIds.map((id) => ({ id })),
@@ -202,6 +243,16 @@ export async function POST(req: Request) {
           : undefined,
         // On rattache toujours le lead à la société de l'utilisateur connecté.
         companyId: user.companyId,
+      },
+    });
+
+    await prisma.activity.create({
+      data: {
+        type: 'NOTE',
+        relatedTo: lead.id,
+        leadId: lead.id,
+        userId: user.id,
+        content: `Lead créé manuellement par ${user.name} (${user.email}).`,
       },
     });
 
@@ -250,10 +301,15 @@ export async function PATCH(req: Request) {
     const json = await req.json();
     const body = updateLeadSchema.parse(json);
 
-    const existing = await prisma.lead.findFirst({
-      where: { id: body.id, companyId: user.companyId },
-      select: { id: true },
-    });
+    const existing =
+      user.role === 'AGENT'
+        ? (await agentCanModifyLead(body.id, user.companyId, user.id))
+          ? { id: body.id }
+          : null
+        : await prisma.lead.findFirst({
+            where: { id: body.id, companyId: user.companyId },
+            select: { id: true },
+          });
     if (!existing) {
       return NextResponse.json(
         { error: 'Lead introuvable dans votre société' },
@@ -272,6 +328,7 @@ export async function PATCH(req: Request) {
         civility: body.civility,
         activityDomain: body.activityDomain,
         companyName: body.companyName,
+        jobTitle: body.jobTitle,
         location: body.location,
         notes: body.notes,
         status: body.status,
@@ -320,10 +377,15 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Missing lead id' }, { status: 400 });
     }
 
-    const existing = await prisma.lead.findFirst({
-      where: { id, companyId: user.companyId },
-      select: { id: true },
-    });
+    const existing =
+      user.role === 'AGENT'
+        ? (await agentCanModifyLead(id, user.companyId, user.id))
+          ? { id }
+          : null
+        : await prisma.lead.findFirst({
+            where: { id, companyId: user.companyId },
+            select: { id: true },
+          });
     if (!existing) {
       return NextResponse.json(
         { error: 'Lead introuvable dans votre société' },

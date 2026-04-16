@@ -59,6 +59,10 @@ export function withDashboardLayout<P extends object>(
 
           {/* Contenu spécifique à chaque page dashboard */}
           <PageComponent {...props} />
+
+          <footer className='mt-2 text-center text-[11px] text-gray-400'>
+            © 2026 by Appatam
+          </footer>
         </main>
       </div>
     );

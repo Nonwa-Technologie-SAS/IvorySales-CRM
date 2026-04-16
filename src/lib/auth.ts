@@ -2,7 +2,12 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export type Role = "ADMIN" | "MANAGER" | "AGENT";
+export type Role = "ADMIN" | "MANAGER" | "DIRECTRICE_COMMERCIALE" | "AGENT";
+
+function effectiveRoleForPermissions(role: Role): Role {
+  // DIRECTRICE_COMMERCIALE a les mêmes droits qu’un MANAGER
+  return role === "DIRECTRICE_COMMERCIALE" ? "MANAGER" : role;
+}
 
 export interface AuthUser {
   id: string;
@@ -41,7 +46,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
  */
 export function hasRole(user: AuthUser | null, allowedRoles: Role[]): boolean {
   if (!user) return false;
-  return allowedRoles.includes(user.role);
+  return allowedRoles.includes(effectiveRoleForPermissions(user.role));
 }
 
 /**
@@ -59,11 +64,45 @@ export async function requireRole(
       { status: 401 }
     );
   }
-  if (!allowedRoles.includes(user.role)) {
+  if (!allowedRoles.includes(effectiveRoleForPermissions(user.role))) {
     return NextResponse.json(
       { error: "Accès refusé" },
       { status: 403 }
     );
   }
   return { user };
+}
+
+/**
+ * Périmètre entreprise pour rapports / objectifs : ADMIN & MANAGER restent sur leur société.
+ * DIRECTRICE_COMMERCIALE : sans companyId en query → société rattachée ; avec companyId → même règle que GET /api/leads (entreprise doit exister).
+ */
+export async function resolveGroupCompanyScope(
+  user: AuthUser,
+  companyIdParam: string | null,
+): Promise<{ companyId: string } | NextResponse> {
+  if (!user.companyId) {
+    return NextResponse.json(
+      { error: "Société non associée à l'utilisateur" },
+      { status: 403 },
+    );
+  }
+  if (user.role !== "DIRECTRICE_COMMERCIALE") {
+    return { companyId: user.companyId };
+  }
+  const requested = companyIdParam?.trim() ?? "";
+  if (!requested) {
+    return { companyId: user.companyId };
+  }
+  const company = await prisma.company.findUnique({
+    where: { id: requested },
+    select: { id: true },
+  });
+  if (!company) {
+    return NextResponse.json(
+      { error: "Entreprise introuvable" },
+      { status: 400 },
+    );
+  }
+  return { companyId: company.id };
 }

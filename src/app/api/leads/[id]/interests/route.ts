@@ -4,15 +4,25 @@ import { z } from 'zod';
 
 const interestsPayloadSchema = z.object({
   items: z.array(
-    z.object({
-      kind: z.enum(['product', 'service']),
-      id: z.string().min(1),
-      estimatedValue: z.number().min(0),
-    }),
+    z
+      .object({
+        kind: z.enum(['product', 'service']),
+        id: z.string().min(1).optional(),
+        customName: z.string().trim().min(2).optional(),
+        estimatedValue: z.number().min(0),
+      })
+      .refine(
+        (item) => (item.id ? 1 : 0) + (item.customName ? 1 : 0) === 1,
+        'Chaque intérêt doit contenir soit id soit customName (mais pas les deux).',
+      ),
   ),
 });
 
 type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+function normalizeCustomName(value: string) {
+  return value.trim().toLocaleLowerCase('fr-FR');
+}
 
 /** PUT /api/leads/[id]/interests - Remplace les intérêts (produits/services) d'un lead avec estimation */
 export async function PUT(
@@ -24,12 +34,49 @@ export async function PUT(
     const json = await req.json();
     const body = interestsPayloadSchema.parse(json);
 
-    const productItems = body.items
-      .filter((i) => i.kind === 'product')
-      .map((i) => ({ productId: i.id, estimatedValue: i.estimatedValue }));
-    const serviceItems = body.items
-      .filter((i) => i.kind === 'service')
-      .map((i) => ({ serviceId: i.id, estimatedValue: i.estimatedValue }));
+    const productRaw = body.items.filter((i) => i.kind === 'product');
+    const serviceRaw = body.items.filter((i) => i.kind === 'service');
+
+    const dedupedProducts = new Map<
+      string,
+      { productId?: string; customName?: string; estimatedValue: number }
+    >();
+    for (const item of productRaw) {
+      if (item.id) {
+        dedupedProducts.set(`id:${item.id}`, {
+          productId: item.id,
+          estimatedValue: item.estimatedValue,
+        });
+      } else if (item.customName) {
+        const normalized = normalizeCustomName(item.customName);
+        dedupedProducts.set(`custom:${normalized}`, {
+          customName: item.customName.trim(),
+          estimatedValue: item.estimatedValue,
+        });
+      }
+    }
+
+    const dedupedServices = new Map<
+      string,
+      { serviceId?: string; customName?: string; estimatedValue: number }
+    >();
+    for (const item of serviceRaw) {
+      if (item.id) {
+        dedupedServices.set(`id:${item.id}`, {
+          serviceId: item.id,
+          estimatedValue: item.estimatedValue,
+        });
+      } else if (item.customName) {
+        const normalized = normalizeCustomName(item.customName);
+        dedupedServices.set(`custom:${normalized}`, {
+          customName: item.customName.trim(),
+          estimatedValue: item.estimatedValue,
+        });
+      }
+    }
+
+    const productItems = Array.from(dedupedProducts.values());
+    const serviceItems = Array.from(dedupedServices.values());
 
     const result = await prisma.$transaction(async (tx: PrismaTx) => {
       const leadExists = await tx.lead.findUnique({
@@ -47,7 +94,8 @@ export async function PUT(
         await tx.leadProductInterest.createMany({
           data: productItems.map((p) => ({
             leadId,
-            productId: p.productId,
+            productId: p.productId ?? null,
+            customName: p.customName ?? null,
             estimatedValue: p.estimatedValue,
           })),
         });
@@ -56,15 +104,23 @@ export async function PUT(
         await tx.leadServiceInterest.createMany({
           data: serviceItems.map((s) => ({
             leadId,
-            serviceId: s.serviceId,
+            serviceId: s.serviceId ?? null,
+            customName: s.customName ?? null,
             estimatedValue: s.estimatedValue,
           })),
         });
       }
 
+      const customProducts = productItems.filter((i) => !!i.customName).length;
+      const customServices = serviceItems.filter((i) => !!i.customName).length;
       return {
         notFound: false as const,
-        counts: { products: productItems.length, services: serviceItems.length },
+        counts: {
+          products: productItems.length,
+          services: serviceItems.length,
+          customProducts,
+          customServices,
+        },
       };
     });
 

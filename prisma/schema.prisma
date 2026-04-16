@@ -12,6 +12,8 @@ model Company {
   id        String   @id @default(cuid())
   name      String
   plan      String   @default("free")
+  /// Différencie les entreprises du groupe (GROUP) des entreprises clientes (CLIENT)
+  kind      CompanyKind @default(CLIENT)
   createdAt DateTime @default(now())
 
   users      User[]
@@ -23,6 +25,11 @@ model Company {
   salesGoals SalesGoal[]
   /// Ventes réalisées pour cette société
   sales      Sale[]
+}
+
+enum CompanyKind {
+  GROUP
+  CLIENT
 }
 
 model Product {
@@ -72,6 +79,8 @@ model User {
 
   activities       Activity[]
   clientsConverted Client[]
+  /// Éléments d'agenda créés par cet utilisateur
+  agendaItemsCreated AgendaItem[]
   /// Objectifs commerciaux assignés à cet utilisateur
   salesGoals       SalesGoal[]
   /// Objectifs que cet utilisateur a définis (manager/admin)
@@ -93,6 +102,8 @@ model Lead {
   activityDomain String?
   /// Nom de la compagnie au moment de la création du lead
   companyName String?
+  /// Poste / fonction du prospect dans son entreprise
+  jobTitle   String?
   /// Adresse / localisation (utile pour l'affichage sur la carte)
   location   String?
   /// Notes libres (ex: observation du fichier Excel)
@@ -123,12 +134,15 @@ model LeadProductInterest {
   id             String   @id @default(cuid())
   lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   leadId         String
-  product        Product  @relation(fields: [productId], references: [id])
-  productId      String
+  product        Product? @relation(fields: [productId], references: [id])
+  productId      String?
+  /// Nom libre saisi via bouton "Autre" quand aucun produit catalogue n'est associé
+  customName     String?
   estimatedValue Float    @default(0)
   createdAt      DateTime @default(now())
 
   @@unique([leadId, productId])
+  @@unique([leadId, customName])
 }
 
 /// Lien entre un lead et un service, avec une valeur estimative associée
@@ -136,12 +150,15 @@ model LeadServiceInterest {
   id             String   @id @default(cuid())
   lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   leadId         String
-  service        Service  @relation(fields: [serviceId], references: [id])
-  serviceId      String
+  service        Service? @relation(fields: [serviceId], references: [id])
+  serviceId      String?
+  /// Nom libre saisi via bouton "Autre" quand aucun service catalogue n'est associé
+  customName     String?
   estimatedValue Float    @default(0)
   createdAt      DateTime @default(now())
 
   @@unique([leadId, serviceId])
+  @@unique([leadId, customName])
 }
 
 /// Pièce jointe d'un prospect (fichier uploadé)
@@ -286,6 +303,7 @@ model Activity {
 enum Role {
   ADMIN
   MANAGER
+  DIRECTRICE_COMMERCIALE
   AGENT
 }
 
@@ -346,6 +364,9 @@ model AgendaItem {
   id          String       @id @default(cuid())
   lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   leadId      String
+  /// Utilisateur (commercial/membre) qui a créé cette tâche
+  createdById String?
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
   title       String
   description String?
   dueDate     DateTime

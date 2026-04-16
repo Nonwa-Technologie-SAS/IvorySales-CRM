@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 
 const agendaStatusValues = ["TODO", "IN_PROGRESS", "DONE"] as const;
@@ -15,6 +16,11 @@ const createAgendaSchema = z.object({
 /** GET /api/agenda?leadId=xxx - Liste les tâches/événements agenda d'un lead */
 export async function GET(req: Request) {
   try {
+    const authUser = await getCurrentUser();
+    if (!authUser) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
     const url = new URL(req.url);
     const leadId = url.searchParams.get("leadId");
 
@@ -24,6 +30,9 @@ export async function GET(req: Request) {
 
     const items = await prisma.agendaItem.findMany({
       where: { leadId },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+      },
       orderBy: { dueDate: "asc" },
     });
 
@@ -40,6 +49,11 @@ export async function GET(req: Request) {
 /** POST /api/agenda - Crée une tâche/événement agenda */
 export async function POST(req: Request) {
   try {
+    const authUser = await getCurrentUser();
+    if (!authUser) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
     const json = await req.json();
     const body = createAgendaSchema.parse(json);
 
@@ -55,10 +69,14 @@ export async function POST(req: Request) {
     const item = await prisma.agendaItem.create({
       data: {
         leadId: body.leadId,
+        createdById: authUser.id,
         title: body.title,
         description: body.description,
         dueDate: new Date(body.dueDate),
         status: body.status ?? "TODO",
+      },
+      include: {
+        createdBy: { select: { id: true, name: true } },
       },
     });
 

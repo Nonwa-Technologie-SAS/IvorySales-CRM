@@ -14,6 +14,7 @@ export interface Lead {
   source?: string | null;
   notes?: string | null;
   companyName?: string | null;
+  jobTitle?: string | null;
   location?: string | null;
   activityDomain?: string | null;
   civility?: string | null;
@@ -71,6 +72,9 @@ export default function LeadCard({ lead, onClick, draggable, onDragStart }: Lead
             <h3 className="text-sm font-semibold text-primary truncate">
               {lead.firstName} {lead.lastName}
             </h3>
+            {lead.jobTitle && (
+              <p className="text-[10px] text-gray-400 truncate">{lead.jobTitle}</p>
+            )}
             <p className="text-[11px] text-gray-500 truncate">{companyOrSource}</p>
           </div>
         </div>

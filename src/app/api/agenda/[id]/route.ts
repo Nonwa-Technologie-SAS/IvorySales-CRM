@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 
 const agendaStatusValues = ["TODO", "IN_PROGRESS", "DONE"] as const;
@@ -14,6 +15,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authUser = await getCurrentUser();
+    if (!authUser) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
     const { id } = await params;
     const json = await req.json();
     const body = updateSchema.parse(json);
@@ -29,6 +35,7 @@ export async function PATCH(
     const updated = await prisma.agendaItem.update({
       where: { id },
       data: { status: body.status },
+      include: { createdBy: { select: { id: true, name: true } } },
     });
 
     return NextResponse.json(updated);

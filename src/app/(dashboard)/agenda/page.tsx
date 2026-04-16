@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
+import { useAuth } from "@/contexts/AuthContext";
 import AgendaViewFilter from "@/components/agenda/AgendaViewFilter";
 import type { AgendaView, CustomPeriod } from "@/components/agenda/AgendaViewFilter";
 import AgendaCalendarBlock from "@/components/agenda/AgendaCalendarBlock";
 
+type CompanyOpt = { id: string; name: string };
+type UserOpt = { id: string; name: string };
+
 function AgendaPageInner() {
+  const { user: authUser } = useAuth();
+  const isDirector = authUser?.role === "directrice_commerciale";
+
   const [view, setView] = useState<AgendaView>("semaine");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [customPeriod, setCustomPeriod] = useState<CustomPeriod>(() => {
@@ -18,6 +25,68 @@ function AgendaPageInner() {
       end: endOfWeek(now, { weekStartsOn: 1 }),
     };
   });
+
+  const [companyOptions, setCompanyOptions] = useState<CompanyOpt[]>([]);
+  /** '' = ma société (pas de companyId dans l’URL calendrier) */
+  const [agendaCompanyId, setAgendaCompanyId] = useState("");
+  const [agendaUserId, setAgendaUserId] = useState("");
+  const [agendaUsers, setAgendaUsers] = useState<UserOpt[]>([]);
+
+  useEffect(() => {
+    if (!isDirector) return;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/companies", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const groupCompanies = data.filter(
+            (c: { kind?: string }) => c.kind === "GROUP",
+          );
+          setCompanyOptions(
+            groupCompanies.map((c: { id: string; name: string }) => ({
+              id: c.id,
+              name: c.name,
+            })),
+          );
+        }
+      } catch {
+        // silencieux
+      }
+    };
+    void load();
+  }, [isDirector]);
+
+  useEffect(() => {
+    if (!isDirector || !agendaCompanyId) return;
+    if (companyOptions.length === 0) return;
+    if (!companyOptions.some((c) => c.id === agendaCompanyId)) {
+      setAgendaCompanyId("");
+      setAgendaUserId("");
+    }
+  }, [isDirector, agendaCompanyId, companyOptions]);
+
+  useEffect(() => {
+    if (!isDirector) return;
+    const loadUsers = async () => {
+      try {
+        const url = agendaCompanyId.trim()
+          ? `/api/users?companyId=${encodeURIComponent(agendaCompanyId)}`
+          : "/api/users";
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setAgendaUsers(
+            data.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
+          );
+        }
+      } catch {
+        setAgendaUsers([]);
+      }
+    };
+    void loadUsers();
+  }, [isDirector, agendaCompanyId]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -35,6 +104,56 @@ function AgendaPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Filtre entreprise + commerciale (directrice) */}
+      {isDirector && (
+        <section className="rounded-2xl bg-white/80 border border-indigo-100/80 p-3">
+          <p className="text-[11px] font-medium text-gray-600 mb-2">
+            Filtrer par équipe
+          </p>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1 min-w-[180px]">
+              <label className="text-[11px] text-gray-500" htmlFor="agenda-company">
+                Entreprise
+              </label>
+              <select
+                id="agenda-company"
+                value={agendaCompanyId}
+                onChange={(e) => {
+                  setAgendaCompanyId(e.target.value);
+                  setAgendaUserId("");
+                }}
+                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+              >
+                <option value="">Ma société</option>
+                {companyOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1 min-w-[180px]">
+              <label className="text-[11px] text-gray-500" htmlFor="agenda-user">
+                Commerciale
+              </label>
+              <select
+                id="agenda-user"
+                value={agendaUserId}
+                onChange={(e) => setAgendaUserId(e.target.value)}
+                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+              >
+                <option value="">Choisir une commerciale…</option>
+                {agendaUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Bloc 2 : Filtre de vue (Jour | Semaine | Mois | Année | Période) + choix des dates si Période */}
       <section className="rounded-2xl bg-white/80 border border-gray-100 p-3">
@@ -55,6 +174,9 @@ function AgendaPageInner() {
           onCurrentDateChange={setCurrentDate}
           customRange={view === "période" ? customPeriod : undefined}
           onCustomRangeChange={view === "période" ? setCustomPeriod : undefined}
+          filterCompanyId={agendaCompanyId}
+          filterAssignedUserId={agendaUserId}
+          blockFetch={isDirector && !agendaUserId.trim()}
         />
       </section>
     </div>

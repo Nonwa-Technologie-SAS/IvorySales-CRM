@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unstable-nested-components */
 'use client';
 
 import NeumoCard from '@/components/NeumoCard';
@@ -9,20 +8,38 @@ export type InterestKind = 'product' | 'service';
 
 export type InterestItemLite = { id: string; name: string };
 
-export type InterestsPayloadItem = {
-  kind: InterestKind;
-  id: string;
-  estimatedValue: number;
-};
+export type InterestsPayloadItem =
+  | {
+      kind: InterestKind;
+      id: string;
+      estimatedValue: number;
+      customName?: never;
+    }
+  | {
+      kind: InterestKind;
+      customName: string;
+      estimatedValue: number;
+      id?: never;
+    };
 
 type SavedInterests = {
   products: Record<string, number>;
   services: Record<string, number>;
 };
 
+type PartnerCompanyCatalog = {
+  id: string;
+  name: string;
+  products: InterestItemLite[];
+  services: InterestItemLite[];
+};
+
 type Props = {
   products: InterestItemLite[];
   services: InterestItemLite[];
+  partnerCompanies?: PartnerCompanyCatalog[];
+  customProducts?: string[];
+  customServices?: string[];
   initialSaved: SavedInterests;
   disabled?: boolean;
   onSave: (items: InterestsPayloadItem[]) => Promise<
@@ -36,6 +53,14 @@ function normalizeQuery(q: string) {
   return q.trim().toLowerCase();
 }
 
+function normalizeCustomName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('fr-FR');
+}
+
+function makeCustomKey(kind: InterestKind, customName: string) {
+  return `custom:${kind}:${normalizeCustomName(customName)}`;
+}
+
 function formatMoneyMaybe(value: number) {
   return value.toLocaleString('fr-FR', {
     minimumFractionDigits: 0,
@@ -43,20 +68,115 @@ function formatMoneyMaybe(value: number) {
   });
 }
 
+type InterestEstimatorRowProps = {
+  kind: InterestKind;
+  item: InterestItemLite;
+  selected: boolean;
+  disabled?: boolean;
+  value: number;
+  onToggle: () => void;
+  onValueChange: (id: string, next: number) => void;
+  onClearMessage: () => void;
+};
+
+/** Composant de ligne stable (hors du parent) pour éviter le remontage à chaque frappe → perte de focus. */
+function InterestEstimatorRow({
+  kind,
+  item,
+  selected,
+  disabled,
+  value,
+  onToggle,
+  onValueChange,
+  onClearMessage,
+}: InterestEstimatorRowProps) {
+  const checkboxId = `lead-interest-${kind}-${item.id}`;
+  const inputId = `lead-interest-${kind}-${item.id}-value`;
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <input
+          id={checkboxId}
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          disabled={disabled}
+          className="h-4 w-4 rounded border-gray-300 accent-primary"
+        />
+        <label
+          htmlFor={checkboxId}
+          className="text-[11px] text-gray-700 truncate cursor-pointer select-none"
+          title={item.name}
+        >
+          {item.name}
+        </label>
+      </div>
+
+      {selected && (
+        <div className="flex items-center gap-2 shrink-0">
+          <label htmlFor={inputId} className="sr-only">
+            Montant estimé
+          </label>
+          <input
+            id={inputId}
+            type="number"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            value={Number.isFinite(value) ? String(value) : ''}
+            onChange={(e) => {
+              onClearMessage();
+              const next = e.target.value === '' ? 0 : Number(e.target.value);
+              if (Number.isNaN(next)) return;
+              onValueChange(item.id, next);
+            }}
+            disabled={disabled}
+            className="h-8 w-28 rounded-xl border border-gray-200 px-3 text-[11px] bg-gray-50 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          />
+          <span className="text-[11px] text-gray-500">FCFA</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LeadInterestsEstimatorCard({
   products,
   services,
+  partnerCompanies = [],
+  customProducts = [],
+  customServices = [],
   initialSaved,
   disabled,
   onSave,
   onAfterSave,
 }: Props) {
   const [query, setQuery] = useState('');
+  const [selectedPartnerCompanyId, setSelectedPartnerCompanyId] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<
     | { type: 'success' | 'error' | 'warn'; text: string }
     | null
   >(null);
+  const [addingCustomProduct, setAddingCustomProduct] = useState(false);
+  const [addingCustomService, setAddingCustomService] = useState(false);
+  const [draftCustomProduct, setDraftCustomProduct] = useState('');
+  const [draftCustomService, setDraftCustomService] = useState('');
+  const [customProductItems, setCustomProductItems] = useState<InterestItemLite[]>(
+    () =>
+      customProducts.map((name) => ({
+        id: makeCustomKey('product', name),
+        name,
+      })),
+  );
+  const [customServiceItems, setCustomServiceItems] = useState<InterestItemLite[]>(
+    () =>
+      customServices.map((name) => ({
+        id: makeCustomKey('service', name),
+        name,
+      })),
+  );
 
   const [selectedProducts, setSelectedProducts] = useState<
     Record<string, boolean>
@@ -84,29 +204,64 @@ export default function LeadInterestsEstimatorCard({
 
   const currentItems = useMemo(() => {
     const items: InterestsPayloadItem[] = [];
+    const productById = new Map(
+      [...products, ...customProductItems].map((item) => [item.id, item] as const),
+    );
+    const serviceById = new Map(
+      [...services, ...customServiceItems].map((item) => [item.id, item] as const),
+    );
+
     for (const [id, isSelected] of Object.entries(selectedProducts)) {
       if (!isSelected) continue;
-      items.push({ kind: 'product', id, estimatedValue: values[id] ?? 0 });
+      const custom = productById.get(id);
+      if (id.startsWith('custom:product:') && custom) {
+        items.push({
+          kind: 'product',
+          customName: custom.name,
+          estimatedValue: values[id] ?? 0,
+        });
+      } else {
+        items.push({ kind: 'product', id, estimatedValue: values[id] ?? 0 });
+      }
     }
     for (const [id, isSelected] of Object.entries(selectedServices)) {
       if (!isSelected) continue;
-      items.push({ kind: 'service', id, estimatedValue: values[id] ?? 0 });
+      const custom = serviceById.get(id);
+      if (id.startsWith('custom:service:') && custom) {
+        items.push({
+          kind: 'service',
+          customName: custom.name,
+          estimatedValue: values[id] ?? 0,
+        });
+      } else {
+        items.push({ kind: 'service', id, estimatedValue: values[id] ?? 0 });
+      }
     }
     return items;
-  }, [selectedProducts, selectedServices, values]);
+  }, [customProductItems, customServiceItems, products, selectedProducts, selectedServices, services, values]);
 
   const currentFingerprint = useMemo(() => {
     const p = currentItems
       .filter((i) => i.kind === 'product')
-      .map((i) => [i.id, i.estimatedValue] as const)
+      .map((i) => {
+        const customName = 'customName' in i ? i.customName : '';
+        const key =
+          'id' in i && i.id ? i.id : `custom:${normalizeCustomName(customName || '')}`;
+        return [key, i.estimatedValue] as const;
+      })
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([id, v]) => `${id}:${v}`)
+      .map(([key, v]) => `${key}:${v}`)
       .join('|');
     const s = currentItems
       .filter((i) => i.kind === 'service')
-      .map((i) => [i.id, i.estimatedValue] as const)
+      .map((i) => {
+        const customName = 'customName' in i ? i.customName : '';
+        const key =
+          'id' in i && i.id ? i.id : `custom:${normalizeCustomName(customName || '')}`;
+        return [key, i.estimatedValue] as const;
+      })
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([id, v]) => `${id}:${v}`)
+      .map(([key, v]) => `${key}:${v}`)
       .join('|');
     return `p=${p};s=${s}`;
   }, [currentItems]);
@@ -120,19 +275,42 @@ export default function LeadInterestsEstimatorCard({
 
   const selectedCount = currentItems.length;
 
+  const selectedPartnerCompany = useMemo(
+    () => partnerCompanies.find((company) => company.id === selectedPartnerCompanyId) ?? null,
+    [partnerCompanies, selectedPartnerCompanyId],
+  );
+
+  const availableProducts = useMemo(() => {
+    const merged = [
+      ...products,
+      ...(selectedPartnerCompany?.products ?? []),
+      ...customProductItems,
+    ];
+    return Array.from(new Map(merged.map((item) => [item.id, item])).values());
+  }, [customProductItems, products, selectedPartnerCompany]);
+
+  const availableServices = useMemo(() => {
+    const merged = [
+      ...services,
+      ...(selectedPartnerCompany?.services ?? []),
+      ...customServiceItems,
+    ];
+    return Array.from(new Map(merged.map((item) => [item.id, item])).values());
+  }, [customServiceItems, services, selectedPartnerCompany]);
+
   const normalized = normalizeQuery(query);
   const filteredProducts = useMemo(() => {
-    if (!normalized) return products;
-    return products.filter((p) => p.name.toLowerCase().includes(normalized));
-  }, [normalized, products]);
+    if (!normalized) return availableProducts;
+    return availableProducts.filter((p) => p.name.toLowerCase().includes(normalized));
+  }, [availableProducts, normalized]);
 
   const filteredServices = useMemo(() => {
-    if (!normalized) return services;
-    return services.filter((s) => s.name.toLowerCase().includes(normalized));
-  }, [normalized, services]);
+    if (!normalized) return availableServices;
+    return availableServices.filter((s) => s.name.toLowerCase().includes(normalized));
+  }, [availableServices, normalized]);
 
   const canSearch =
-    (products?.length ?? 0) + (services?.length ?? 0) > 12;
+    (availableProducts?.length ?? 0) + (availableServices?.length ?? 0) > 12;
 
   const validate = () => {
     for (const item of currentItems) {
@@ -166,12 +344,24 @@ export default function LeadInterestsEstimatorCard({
         products: Object.fromEntries(
           currentItems
             .filter((i) => i.kind === 'product')
-            .map((i) => [i.id, i.estimatedValue]),
+            .map((i) => {
+              const key =
+                'id' in i && i.id
+                  ? i.id
+                  : makeCustomKey('product', ('customName' in i && i.customName) ? i.customName : '');
+              return [key, i.estimatedValue] as const;
+            }),
         ),
         services: Object.fromEntries(
           currentItems
             .filter((i) => i.kind === 'service')
-            .map((i) => [i.id, i.estimatedValue]),
+            .map((i) => {
+              const key =
+                'id' in i && i.id
+                  ? i.id
+                  : makeCustomKey('service', ('customName' in i && i.customName) ? i.customName : '');
+              return [key, i.estimatedValue] as const;
+            }),
         ),
       };
 
@@ -186,78 +376,63 @@ export default function LeadInterestsEstimatorCard({
     }
   };
 
-  const Row = ({
-    kind,
-    item,
-    selected,
-  }: {
-    kind: InterestKind;
-    item: InterestItemLite;
-    selected: boolean;
-  }) => {
-    const checkboxId = `lead-interest-${kind}-${item.id}`;
-    const inputId = `lead-interest-${kind}-${item.id}-value`;
-    const value = values[item.id] ?? 0;
+  const handleRowToggle = (
+    kind: InterestKind,
+    item: InterestItemLite,
+    isSelected: boolean,
+  ) => {
+    if (disabled) return;
+    setMessage(null);
+    if (kind === 'product') {
+      setSelectedProducts((prev) => ({ ...prev, [item.id]: !isSelected }));
+    } else {
+      setSelectedServices((prev) => ({ ...prev, [item.id]: !isSelected }));
+    }
+    if (!isSelected && values[item.id] === undefined) {
+      setValues((prev) => ({ ...prev, [item.id]: 0 }));
+    }
+  };
 
-    const toggle = () => {
-      if (disabled) return;
-      setMessage(null);
-      if (kind === 'product') {
-        setSelectedProducts((prev) => ({ ...prev, [item.id]: !selected }));
-      } else {
-        setSelectedServices((prev) => ({ ...prev, [item.id]: !selected }));
-      }
-      if (!selected && values[item.id] === undefined) {
-        setValues((prev) => ({ ...prev, [item.id]: 0 }));
-      }
-    };
+  const addCustomItem = (kind: InterestKind) => {
+    const draft = kind === 'product' ? draftCustomProduct : draftCustomService;
+    const cleaned = draft.trim().replace(/\s+/g, ' ');
+    if (cleaned.length < 2) {
+      setMessage({
+        type: 'warn',
+        text: 'Le nom personnalisé doit contenir au moins 2 caractères.',
+      });
+      return;
+    }
+    const normalized = normalizeCustomName(cleaned);
+    const existingNames =
+      kind === 'product'
+        ? availableProducts.map((item) => normalizeCustomName(item.name))
+        : availableServices.map((item) => normalizeCustomName(item.name));
+    if (existingNames.includes(normalized)) {
+      setMessage({
+        type: 'warn',
+        text: `Cet ${kind === 'product' ? 'élément produit' : 'élément service'} existe déjà.`,
+      });
+      return;
+    }
 
-    return (
-      <div className="flex items-center justify-between gap-2 py-1.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <input
-            id={checkboxId}
-            type="checkbox"
-            checked={selected}
-            onChange={toggle}
-            disabled={disabled}
-            className="h-4 w-4 rounded border-gray-300 accent-primary"
-          />
-          <label
-            htmlFor={checkboxId}
-            className="text-[11px] text-gray-700 truncate cursor-pointer select-none"
-            title={item.name}
-          >
-            {item.name}
-          </label>
-        </div>
+    const id = makeCustomKey(kind, cleaned);
+    const item = { id, name: cleaned };
 
-        {selected && (
-          <div className="flex items-center gap-2 shrink-0">
-            <label htmlFor={inputId} className="sr-only">
-              Montant estimé
-            </label>
-            <input
-              id={inputId}
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={Number.isFinite(value) ? String(value) : ''}
-              onChange={(e) => {
-                setMessage(null);
-                const next = e.target.value === '' ? 0 : Number(e.target.value);
-                if (Number.isNaN(next)) return;
-                setValues((prev) => ({ ...prev, [item.id]: next }));
-              }}
-              disabled={disabled}
-              className="h-8 w-28 rounded-xl border border-gray-200 px-3 text-[11px] bg-gray-50 focus:outline-none focus:ring-1 focus:ring-primary/40"
-            />
-            <span className="text-[11px] text-gray-500">MAD</span>
-          </div>
-        )}
-      </div>
-    );
+    if (kind === 'product') {
+      setCustomProductItems((prev) => [...prev, item]);
+      setSelectedProducts((prev) => ({ ...prev, [id]: true }));
+      setValues((prev) => ({ ...prev, [id]: prev[id] ?? 0 }));
+      setDraftCustomProduct('');
+      setAddingCustomProduct(false);
+    } else {
+      setCustomServiceItems((prev) => [...prev, item]);
+      setSelectedServices((prev) => ({ ...prev, [id]: true }));
+      setValues((prev) => ({ ...prev, [id]: prev[id] ?? 0 }));
+      setDraftCustomService('');
+      setAddingCustomService(false);
+    }
+    setMessage(null);
   };
 
   return (
@@ -272,7 +447,7 @@ export default function LeadInterestsEstimatorCard({
           <span className="font-medium text-gray-700">
             {formatMoneyMaybe(totalEstimated)}
           </span>{' '}
-          MAD
+          FCFA
         </div>
       </div>
 
@@ -289,21 +464,94 @@ export default function LeadInterestsEstimatorCard({
         </div>
       )}
 
+      <div className="rounded-2xl bg-white/60 border border-white/60 p-3 shadow-neu-soft space-y-2">
+        <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide">
+          Vente multi-entreprises
+        </p>
+        <label className="block text-[11px] text-gray-600">
+          Entreprise partenaire
+          <select
+            value={selectedPartnerCompanyId}
+            onChange={(e) => setSelectedPartnerCompanyId(e.target.value)}
+            disabled={disabled || partnerCompanies.length === 0}
+            className="mt-1 w-full h-9 rounded-xl border border-gray-200 px-3 text-[11px] bg-white/80 focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60"
+          >
+            <option value="">Choisir une entreprise…</option>
+            {partnerCompanies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedPartnerCompany ? (
+          <p className="text-[10px] text-gray-500">
+            {selectedPartnerCompany.products.length} produit(s) et {selectedPartnerCompany.services.length}{' '}
+            service(s) ajoutés au catalogue ci-dessous.
+          </p>
+        ) : (
+          <p className="text-[10px] text-gray-500">
+            Choisissez une entreprise pour afficher automatiquement ses produits et services.
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-3">
         <div className="rounded-2xl bg-white/60 border border-white/60 p-3 shadow-neu-soft">
-          <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide mb-2">
-            Produits
-          </p>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide">
+              Produits
+            </p>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setAddingCustomProduct((prev) => !prev);
+                setMessage(null);
+              }}
+              className="text-[10px] text-primary font-medium hover:underline disabled:opacity-60"
+            >
+              + Autre
+            </button>
+          </div>
+          {addingCustomProduct && (
+            <div className="mb-2 flex items-center gap-2">
+              <input
+                value={draftCustomProduct}
+                onChange={(e) => setDraftCustomProduct(e.target.value)}
+                placeholder="Nom du produit personnalisé"
+                disabled={disabled}
+                className="h-8 flex-1 rounded-xl border border-gray-200 px-3 text-[11px] bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => addCustomItem('product')}
+                disabled={disabled}
+                className="h-8 px-3 rounded-xl bg-primary text-white text-[11px] disabled:opacity-60"
+              >
+                Valider
+              </button>
+            </div>
+          )}
           {filteredProducts.length === 0 ? (
             <p className="text-[11px] text-gray-500">Aucun produit.</p>
           ) : (
             <div className="flex flex-col">
               {filteredProducts.map((p) => (
-                <Row
+                <InterestEstimatorRow
                   key={p.id}
                   kind="product"
                   item={p}
                   selected={!!selectedProducts[p.id]}
+                  disabled={disabled}
+                  value={values[p.id] ?? 0}
+                  onToggle={() =>
+                    handleRowToggle('product', p, !!selectedProducts[p.id])
+                  }
+                  onValueChange={(id, next) =>
+                    setValues((prev) => ({ ...prev, [id]: next }))
+                  }
+                  onClearMessage={() => setMessage(null)}
                 />
               ))}
             </div>
@@ -311,19 +559,60 @@ export default function LeadInterestsEstimatorCard({
         </div>
 
         <div className="rounded-2xl bg-white/60 border border-white/60 p-3 shadow-neu-soft">
-          <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide mb-2">
-            Services
-          </p>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide">
+              Services
+            </p>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setAddingCustomService((prev) => !prev);
+                setMessage(null);
+              }}
+              className="text-[10px] text-primary font-medium hover:underline disabled:opacity-60"
+            >
+              + Autre
+            </button>
+          </div>
+          {addingCustomService && (
+            <div className="mb-2 flex items-center gap-2">
+              <input
+                value={draftCustomService}
+                onChange={(e) => setDraftCustomService(e.target.value)}
+                placeholder="Nom du service personnalisé"
+                disabled={disabled}
+                className="h-8 flex-1 rounded-xl border border-gray-200 px-3 text-[11px] bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => addCustomItem('service')}
+                disabled={disabled}
+                className="h-8 px-3 rounded-xl bg-primary text-white text-[11px] disabled:opacity-60"
+              >
+                Valider
+              </button>
+            </div>
+          )}
           {filteredServices.length === 0 ? (
             <p className="text-[11px] text-gray-500">Aucun service.</p>
           ) : (
             <div className="flex flex-col">
               {filteredServices.map((s) => (
-                <Row
+                <InterestEstimatorRow
                   key={s.id}
                   kind="service"
                   item={s}
                   selected={!!selectedServices[s.id]}
+                  disabled={disabled}
+                  value={values[s.id] ?? 0}
+                  onToggle={() =>
+                    handleRowToggle('service', s, !!selectedServices[s.id])
+                  }
+                  onValueChange={(id, next) =>
+                    setValues((prev) => ({ ...prev, [id]: next }))
+                  }
+                  onClearMessage={() => setMessage(null)}
                 />
               ))}
             </div>

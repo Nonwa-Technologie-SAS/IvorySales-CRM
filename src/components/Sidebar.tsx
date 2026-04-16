@@ -21,12 +21,12 @@ export const sidebarItems: SidebarItemDef[] = [
   { icon: LayoutGrid, label: 'Dashboard', href: '/' },
   { icon: CalendarDays, label: 'Agenda', href: '/agenda' },
   { icon: UserPlus, label: 'Leads', href: '/leads' },
-  { icon: BarChart3, label: 'Statistiques', href: '/stats', allowedRoles: ['admin', 'manager'] },
-  { icon: Package, label: 'Produits et services', href: '/products-services', allowedRoles: ['admin', 'manager'] },
+  { icon: BarChart3, label: 'Statistiques', href: '/stats', allowedRoles: ['admin', 'manager', 'directrice_commerciale'] },
+  { icon: Package, label: 'Produits et services', href: '/products-services', allowedRoles: ['admin', 'manager', 'directrice_commerciale'] },
   { icon: Building2, label: 'Clients', href: '/clients' },
   { icon: BookOpen, label: 'Guide', href: '/guide' },
-  { icon: Users, label: 'Utilisateurs', href: '/users', allowedRoles: ['admin', 'manager'] },
-  { icon: Settings, label: 'Paramètres', href: '/settings', allowedRoles: ['admin', 'manager'] },
+  { icon: Users, label: 'Utilisateurs', href: '/users', allowedRoles: ['admin', 'manager', 'directrice_commerciale'] },
+  { icon: Settings, label: 'Paramètres', href: '/settings', allowedRoles: ['admin', 'manager', 'directrice_commerciale'] },
 ];
 
 /** Retourne les entrées de menu visibles pour le rôle (AGENT n’a pas Utilisateurs ni Paramètres). */

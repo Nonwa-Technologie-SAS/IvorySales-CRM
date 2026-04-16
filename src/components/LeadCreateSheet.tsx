@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import NeumoCard from "./NeumoCard";
 import { Field } from "./ui/field";
 import {
@@ -29,47 +29,6 @@ export default function LeadCreateSheet({ open, onClose, onCreated }: LeadCreate
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
-  const [services, setServices] = useState<{ id: string; name: string }[]>([]);
-  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!open) return;
-    // Charger une fois la liste des produits/services
-    const fetchData = async () => {
-      try {
-        const [prodRes, servRes] = await Promise.all([
-          fetch("/api/products"),
-          fetch("/api/services"),
-        ]);
-        if (prodRes.ok) {
-          const data = await prodRes.json();
-          setProducts(data);
-        }
-        if (servRes.ok) {
-          const data = await servRes.json();
-          setServices(data);
-        }
-      } catch {
-        // silencieux pour le MVP
-      }
-    };
-    fetchData();
-  }, [open]);
-
-  const toggleProduct = (id: string) => {
-    setSelectedProductIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
-  };
-
-  const toggleService = (id: string) => {
-    setSelectedServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
-  };
-
   if (!open) return null;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -86,6 +45,7 @@ export default function LeadCreateSheet({ open, onClose, onCreated }: LeadCreate
     const civility = String(data.get("civility") || "");
     const notes = String(data.get("notes") || "");
     const companyName = String(data.get("companyName") || "");
+    const jobTitle = String(data.get("jobTitle") || "");
     const location = String(data.get("location") || "");
 
     setLoading(true);
@@ -104,13 +64,12 @@ export default function LeadCreateSheet({ open, onClose, onCreated }: LeadCreate
           activityDomain: activityDomain || undefined,
           civility: civility || undefined,
           companyName: companyName || undefined,
+          jobTitle: jobTitle || undefined,
           location: location || undefined,
           notes: notes || undefined,
           // laissé vide côté front, l'API rattache à une company par défaut
           status,
           companyId: undefined,
-          productIds: selectedProductIds,
-          serviceIds: selectedServiceIds,
         }),
       });
 
@@ -123,8 +82,6 @@ export default function LeadCreateSheet({ open, onClose, onCreated }: LeadCreate
       onCreated?.(created);
       form.reset();
       setStatus("NEW");
-      setSelectedProductIds([]);
-      setSelectedServiceIds([]);
       onClose();
     } catch (err: any) {
       setError(err.message ?? "Erreur inattendue");
@@ -171,6 +128,11 @@ export default function LeadCreateSheet({ open, onClose, onCreated }: LeadCreate
                 label="Nom de la compagnie"
                 placeholder="Ex: Appatam Sarl"
                 description="Nom de l'entreprise rattachée à ce lead."
+              />
+              <Field
+                name="jobTitle"
+                label="Poste / Fonction"
+                placeholder="Ex: Directeur commercial"
               />
               <Field
                 name="location"
@@ -220,63 +182,6 @@ export default function LeadCreateSheet({ open, onClose, onCreated }: LeadCreate
                 placeholder="Observations ou commentaires sur le lead"
                 description="Ces notes pourront aussi venir de la colonne 'observation' de l'Excel."
               />
-
-              {(products.length > 0 || services.length > 0) && (
-                <div className="mt-2 flex flex-col gap-2">
-                  <span className="text-[11px] text-gray-500">
-                    Intérêt pour des produits / services
-                  </span>
-                  <div className="grid grid-cols-1 gap-2">
-                    {products.length > 0 && (
-                      <div className="flex flex-col gap-1 rounded-2xl bg-gray-50 border border-gray-100 p-2">
-                        <span className="text-[11px] font-medium text-gray-600">
-                          Produits
-                        </span>
-                        <div className="max-h-24 overflow-y-auto pr-1 flex flex-col gap-1">
-                          {products.map((p) => (
-                            <label
-                              key={p.id}
-                              className="inline-flex items-center gap-2 text-[11px] text-gray-700"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40"
-                                checked={selectedProductIds.includes(p.id)}
-                                onChange={() => toggleProduct(p.id)}
-                              />
-                              <span className="truncate">{p.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {services.length > 0 && (
-                      <div className="flex flex-col gap-1 rounded-2xl bg-gray-50 border border-gray-100 p-2">
-                        <span className="text-[11px] font-medium text-gray-600">
-                          Services
-                        </span>
-                        <div className="max-h-24 overflow-y-auto pr-1 flex flex-col gap-1">
-                          {services.map((s) => (
-                            <label
-                              key={s.id}
-                              className="inline-flex items-center gap-2 text-[11px] text-gray-700"
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-3 w-3 rounded border-gray-300 text-primary focus:ring-primary/40"
-                                checked={selectedServiceIds.includes(s.id)}
-                                onChange={() => toggleService(s.id)}
-                              />
-                              <span className="truncate">{s.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               <div className="flex flex-col gap-1 mt-1">
                 <span className="text-[11px] text-gray-500">Statut</span>

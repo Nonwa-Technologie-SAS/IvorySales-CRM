@@ -11,7 +11,7 @@ import {
 } from 'react';
 
 /** Rôle côté frontend (aligné avec la règle roles-and-permissions : admin, manager, agent). */
-export type FrontendRole = 'admin' | 'manager' | 'agent';
+export type FrontendRole = 'admin' | 'manager' | 'directrice_commerciale' | 'agent';
 
 export interface AuthUser {
   id: string;
@@ -49,7 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: data.id,
         name: data.name,
         email: data.email,
-        role: role === 'admin' ? 'admin' : role === 'manager' ? 'manager' : 'agent',
+        role:
+          role === 'admin'
+            ? 'admin'
+            : role === 'manager' || role === 'directrice_commerciale'
+              ? role
+              : 'agent',
         mfaEnabled: data.mfaEnabled ?? false,
         company: data.company,
       });

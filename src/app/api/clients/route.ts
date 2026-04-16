@@ -65,8 +65,22 @@ export async function POST(req: Request) {
       where: { id: leadId },
       include: {
         company: true,
-        productInterests: { select: { productId: true, estimatedValue: true } },
-        serviceInterests: { select: { serviceId: true, estimatedValue: true } },
+        productInterests: {
+          select: {
+            productId: true,
+            customName: true,
+            estimatedValue: true,
+            product: { select: { name: true } },
+          },
+        },
+        serviceInterests: {
+          select: {
+            serviceId: true,
+            customName: true,
+            estimatedValue: true,
+            service: { select: { name: true } },
+          },
+        },
       },
     });
 
@@ -88,6 +102,32 @@ export async function POST(req: Request) {
     }
 
     const result = await prisma.$transaction(async (tx: PrismaTx) => {
+      const customProductInterests = lead.productInterests.filter(
+        (i) => !i.productId && i.customName,
+      );
+      const customServiceInterests = lead.serviceInterests.filter(
+        (i) => !i.serviceId && i.customName,
+      );
+      const customInterestNotesLines = [
+        ...customProductInterests.map(
+          (i) => `- Produit (autre): ${i.customName} (${i.estimatedValue} FCFA)`,
+        ),
+        ...customServiceInterests.map(
+          (i) => `- Service (autre): ${i.customName} (${i.estimatedValue} FCFA)`,
+        ),
+      ];
+      const appendedCustomInterestsNotes =
+        customInterestNotesLines.length > 0
+          ? [
+              lead.notes?.trim() || '',
+              '',
+              'Intérêts personnalisés du prospect (hors catalogue):',
+              ...customInterestNotesLines,
+            ]
+              .filter((line, idx, arr) => !(idx === 0 && !line && arr[1] === ''))
+              .join('\n')
+          : lead.notes || undefined;
+
       const client = await tx.client.create({
         data: {
           name: `${lead.firstName} ${lead.lastName}`.trim(),
@@ -99,7 +139,7 @@ export async function POST(req: Request) {
           activityDomain: lead.activityDomain || undefined,
           companyName: lead.companyName ?? lead.company?.name,
           location: lead.location || undefined,
-          notes: lead.notes || undefined,
+          notes: appendedCustomInterestsNotes || undefined,
           companyId: lead.companyId,
           convertedById: user.id,
           convertedAt: new Date(),
@@ -113,13 +153,17 @@ export async function POST(req: Request) {
       const hasClientServiceInterest =
         (tx as any).clientServiceInterest !== undefined;
 
-      const productInterestsSource = lead.productInterests.map((i) => ({
-        productId: i.productId,
+      const productInterestsSource = lead.productInterests
+        .filter((i) => !!i.productId)
+        .map((i) => ({
+        productId: i.productId as string,
         estimatedValue: i.estimatedValue,
       }));
 
-      const serviceInterestsSource = lead.serviceInterests.map((i) => ({
-        serviceId: i.serviceId,
+      const serviceInterestsSource = lead.serviceInterests
+        .filter((i) => !!i.serviceId)
+        .map((i) => ({
+        serviceId: i.serviceId as string,
         estimatedValue: i.estimatedValue,
       }));
 
