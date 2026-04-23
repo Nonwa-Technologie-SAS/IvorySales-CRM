@@ -1,4 +1,5 @@
 import { getCurrentUser, requireRole, resolveGroupCompanyScope } from '@/lib/auth';
+import { sendGoalAssignmentEmails } from '@/lib/goal-email';
 import { getPeriodBounds, getPeriodLabel } from '@/lib/goalPeriods';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
@@ -78,6 +79,51 @@ export async function POST(req: Request) {
         setBy: { select: { id: true, name: true } },
       },
     });
+
+    try {
+      const [company, managersAndAdmins, groupDirectrices] = await Promise.all([
+        prisma.company.findUnique({
+          where: { id: goal.companyId },
+          select: { name: true },
+        }),
+        prisma.user.findMany({
+          where: {
+            companyId: goal.companyId,
+            role: { in: ['MANAGER', 'ADMIN'] },
+          },
+          select: { email: true },
+        }),
+        prisma.user.findMany({
+          where: { role: 'DIRECTRICE_COMMERCIALE' },
+          select: { email: true },
+        }),
+      ]);
+
+      const managementRecipients = [
+        ...managersAndAdmins.map((u) => u.email),
+        ...groupDirectrices.map((u) => u.email),
+      ];
+
+      await sendGoalAssignmentEmails({
+        companyName: company?.name ?? 'Votre entreprise',
+        commercialName: goal.user.name,
+        commercialEmail: goal.user.email,
+        periodType: goal.periodType,
+        periodStart: goal.periodStart,
+        targetConversions: goal.targetConversions,
+        targetRevenue: goal.targetRevenue,
+        setByName: goal.setBy?.name ?? 'Systeme',
+        managementRecipients,
+      });
+    } catch (emailError) {
+      console.error('POST /api/goals email error', {
+        goalId: goal.id,
+        companyId: goal.companyId,
+        message:
+          emailError instanceof Error ? emailError.message : 'Unknown error',
+      });
+    }
+
     return NextResponse.json(goal, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {

@@ -30,7 +30,14 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, role: true, mfaEnabled: true, mfaSecret: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        mfaEnabled: true,
+        mfaSecret: true,
+        mustChangePassword: true,
+      },
     });
 
     if (!user) {
@@ -81,6 +88,13 @@ export async function POST(req: Request) {
     });
 
     res.cookies.set("auth_role", user.role, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    res.cookies.set("must_change_password", user.mustChangePassword ? "1" : "0", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

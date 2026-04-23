@@ -1,17 +1,61 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { render } from "@react-email/render";
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { LeadEmailTemplate } from "@/emails/LeadEmail";
+import { sanitizeEmailBodyHtml } from "@/lib/email-html-sanitize";
+import {
+  emailHtmlToPlainSummary,
+  isEmailBodyHtmlEmpty,
+} from "@/lib/email-html-shared";
 
 const sendEmailSchema = z.object({
   leadId: z.string().min(1),
   to: z.string().email(),
   subject: z.string().min(1),
-  body: z.string().min(1),
+  bodyHtml: z.string().min(1),
+  cc: z.array(z.string().email()).max(25).optional(),
+  bcc: z.array(z.string().email()).max(25).optional(),
   recipientName: z.string().optional(),
+  createFollowUpTask: z.boolean().optional(),
 });
+
+const MAX_ATTACHMENTS = 10;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 Mo
+const ALLOWED_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "text/csv",
+]);
+
+function parseAddressField(input: FormDataEntryValue | null): string[] {
+  if (typeof input !== "string" || input.trim() === "") return [];
+  try {
+    const parsed = JSON.parse(input);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter(Boolean);
+    }
+  } catch {
+    // ignore malformed JSON and fallback to split
+  }
+  return input
+    .split(/[;,\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 function createTransport() {
   const host = process.env.SMTP_HOST;
@@ -34,8 +78,50 @@ function createTransport() {
 
 export async function POST(req: Request) {
   try {
-    const json = await req.json();
-    const body = sendEmailSchema.parse(json);
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("auth_session")?.value;
+    if (!userId) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 401 });
+    }
+
+    const contentType = req.headers.get("content-type") ?? "";
+    let body: z.infer<typeof sendEmailSchema>;
+    let uploadedFiles: File[] = [];
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      uploadedFiles = formData
+        .getAll("attachments")
+        .filter((v): v is File => v instanceof File && v.size > 0);
+
+      body = sendEmailSchema.parse({
+        leadId: String(formData.get("leadId") ?? ""),
+        to: String(formData.get("to") ?? ""),
+        subject: String(formData.get("subject") ?? ""),
+        bodyHtml: String(formData.get("bodyHtml") ?? ""),
+        cc: parseAddressField(formData.get("cc")),
+        bcc: parseAddressField(formData.get("bcc")),
+        recipientName: String(formData.get("recipientName") ?? ""),
+        createFollowUpTask:
+          String(formData.get("createFollowUpTask") ?? "false") === "true",
+      });
+    } else {
+      const json = await req.json();
+      body = sendEmailSchema.parse(json);
+      uploadedFiles = [];
+    }
+
+    if (isEmailBodyHtmlEmpty(body.bodyHtml)) {
+      return NextResponse.json(
+        { error: "Le message ne peut pas être vide" },
+        { status: 400 },
+      );
+    }
 
     const lead = await prisma.lead.findUnique({
       where: { id: body.leadId },
@@ -45,33 +131,86 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
     }
 
+    const safeHtml = sanitizeEmailBodyHtml(body.bodyHtml);
+    const cc = body.cc?.length ? body.cc : undefined;
+    const bcc = body.bcc?.length ? body.bcc : undefined;
+    if (uploadedFiles.length > MAX_ATTACHMENTS) {
+      return NextResponse.json(
+        { error: `Trop de pièces jointes (max ${MAX_ATTACHMENTS})` },
+        { status: 400 },
+      );
+    }
+    for (const file of uploadedFiles) {
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `Fichier trop volumineux: ${file.name} (max 10 Mo)` },
+          { status: 400 },
+        );
+      }
+      if (!ALLOWED_TYPES.has(file.type) && !file.type.startsWith("image/")) {
+        return NextResponse.json(
+          { error: `Type de fichier non autorisé: ${file.name}` },
+          { status: 400 },
+        );
+      }
+    }
+
     const html = await render(
       LeadEmailTemplate({
         subject: body.subject,
-        body: body.body,
+        bodyHtml: safeHtml,
         recipientName: body.recipientName || `${lead.firstName} ${lead.lastName}`,
         companyName: lead.company?.name,
       }),
     );
 
     const transporter = createTransport();
+    const attachments =
+      uploadedFiles.length > 0
+        ? await Promise.all(
+            uploadedFiles.map(async (file) => ({
+              filename: file.name,
+              content: Buffer.from(await file.arrayBuffer()),
+              contentType: file.type || undefined,
+            })),
+          )
+        : undefined;
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: body.to,
+      cc,
+      bcc,
       subject: body.subject,
       html,
+      attachments,
     });
+
+    const plainSummary = emailHtmlToPlainSummary(safeHtml, 4000);
 
     const activity = await prisma.activity.create({
       data: {
         type: "EMAIL",
         relatedTo: "LEAD",
         leadId: body.leadId,
-        userId: (await prisma.user.findFirst())!.id,
-        content: `Subject: ${body.subject}\n\n${body.body}`,
+        userId: user.id,
+        content: `Subject: ${body.subject}\n\n${plainSummary}`,
       },
       include: { user: { select: { name: true } } },
     });
+
+    if (body.createFollowUpTask === true) {
+      const due = new Date();
+      due.setDate(due.getDate() + 7);
+      await prisma.agendaItem.create({
+        data: {
+          leadId: body.leadId,
+          createdById: user.id,
+          title: `Relancer : ${body.subject}`,
+          description: `Email envoyé — voir activité ${activity.id}`,
+          dueDate: due,
+        },
+      });
+    }
 
     return NextResponse.json(activity, { status: 201 });
   } catch (error) {
@@ -88,4 +227,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

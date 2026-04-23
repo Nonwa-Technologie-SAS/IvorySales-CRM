@@ -21,6 +21,7 @@ import { RefreshCw, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { GOALS_INVALIDATE_EVENT } from "@/lib/goals-events";
 
 /** Objectif courant avec réalisé (réponse GET /api/goals/current pour un agent) */
 interface CurrentGoal {
@@ -68,9 +69,6 @@ const LEAD_STATUS_BADGE_STYLES: Record<string, string> = {
   LOST: "bg-rose-100 text-rose-700 border border-rose-200",
   CONVERTED: "bg-teal-100 text-teal-700 border border-teal-200",
 };
-
-/** Événement émis après une conversion lead→client pour rafraîchir les objectifs */
-export const GOALS_INVALIDATE_EVENT = "crm:goals-invalidate";
 
 export default function DashboardPage() {
   const pathname = usePathname();

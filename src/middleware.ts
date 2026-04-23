@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 
 const AUTH_COOKIE = 'auth_session';
 const AUTH_ROLE_COOKIE = 'auth_role';
+const MUST_CHANGE_PASSWORD_COOKIE = 'must_change_password';
 
 /** Routes accessibles sans connexion */
 const PUBLIC_PATHS = ['/login', '/login/mfa', '/forgot-password', '/reset-password'];
@@ -26,9 +27,28 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasAuth = request.cookies.has(AUTH_COOKIE);
   const role = request.cookies.get(AUTH_ROLE_COOKIE)?.value;
+  const mustChangePassword =
+    request.cookies.get(MUST_CHANGE_PASSWORD_COOKIE)?.value === '1';
 
   // Fichiers statiques et API exclues
   if (pathname.startsWith('/_next') || pathname.startsWith('/api')) {
+    if (
+      mustChangePassword &&
+      pathname !== '/api/profile/password' &&
+      pathname !== '/api/auth/logout'
+    ) {
+      return NextResponse.json(
+        { error: 'Changement de mot de passe requis' },
+        { status: 403 },
+      );
+    }
+    return NextResponse.next();
+  }
+
+  if (hasAuth && mustChangePassword) {
+    if (pathname !== '/reset-password') {
+      return NextResponse.redirect(new URL('/reset-password', request.url));
+    }
     return NextResponse.next();
   }
 

@@ -1,5 +1,7 @@
 import { requireRole } from '@/lib/auth';
+import { hashPassword } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
+import { sendWelcomeEmail } from '@/lib/welcome-email';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -61,15 +63,29 @@ export async function POST(req: Request) {
       },
     });
 
+    const hashedPassword = await hashPassword(body.firstUser.password);
+
     const manager = await prisma.user.create({
       data: {
         name: body.firstUser.name,
         email: body.firstUser.email,
-        password: body.firstUser.password,
+        password: hashedPassword,
+        mustChangePassword: true,
         role: 'MANAGER',
         companyId: company.id,
       },
     });
+
+    try {
+      await sendWelcomeEmail({
+        recipientName: manager.name,
+        recipientEmail: manager.email,
+        temporaryPassword: body.firstUser.password,
+        companyName: company.name,
+      });
+    } catch (emailError) {
+      console.error('Welcome email error', emailError);
+    }
 
     return NextResponse.json(
       {

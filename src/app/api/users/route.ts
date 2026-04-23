@@ -1,6 +1,8 @@
 import type { Role } from '@/lib/auth';
 import { requireRole } from '@/lib/auth';
+import { hashPassword } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
+import { sendWelcomeEmail } from '@/lib/welcome-email';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -202,7 +204,7 @@ export async function POST(req: Request) {
     const json = await req.json();
     const body = createUserSchema.parse(json);
 
-    let companyId = currentUser.companyId;
+    const companyId = currentUser.companyId;
     if (body.companyId && body.companyId !== currentUser.companyId) {
       return NextResponse.json(
         {
@@ -212,15 +214,33 @@ export async function POST(req: Request) {
       );
     }
 
+    const hashedPassword = await hashPassword(body.password);
+
     const user = await prisma.user.create({
       data: {
         name: body.name,
         email: body.email,
-        password: body.password, // ⚠️ à remplacer par un hash (bcrypt) en prod
+        password: hashedPassword,
+        mustChangePassword: true,
         role: body.role,
         companyId,
       },
     });
+
+    try {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      });
+      await sendWelcomeEmail({
+        recipientName: user.name,
+        recipientEmail: user.email,
+        temporaryPassword: body.password,
+        companyName: company?.name,
+      });
+    } catch (emailError) {
+      console.error('Welcome email error', emailError);
+    }
 
     return NextResponse.json(user, { status: 201 });
   } catch (error) {

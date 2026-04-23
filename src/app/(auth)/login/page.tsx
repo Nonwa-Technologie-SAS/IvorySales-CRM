@@ -46,6 +46,11 @@ export default function LoginPage() {
         return;
       }
 
+      if (data.mustChangePassword) {
+        router.replace('/reset-password');
+        return;
+      }
+
       // Connexion sans MFA : on affiche un toast puis on redirige vers la page d'origine (from) ou le dashboard.
       const params = new URLSearchParams(window.location.search);
       const from = params.get('from');

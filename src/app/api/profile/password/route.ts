@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { z } from "zod";
 
 const changePasswordSchema = z.object({
@@ -28,22 +29,31 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
     }
 
-    // ⚠️ Mot de passe stocké en clair pour le moment (voir commentaire dans /api/auth/login)
-    if (user.password !== body.currentPassword) {
+    if (!(await verifyPassword(body.currentPassword, user.password))) {
       return NextResponse.json(
         { error: "Mot de passe actuel incorrect" },
         { status: 400 }
       );
     }
 
+    const hashedPassword = await hashPassword(body.newPassword);
+
     await prisma.user.update({
       where: { id: authUser.id },
       data: {
-        password: body.newPassword,
+        password: hashedPassword,
+        mustChangePassword: false,
       },
     });
-
-    return NextResponse.json({ ok: true });
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set("must_change_password", "0", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return res;
   } catch (error) {
     console.error("PATCH /api/profile/password error", error);
     return NextResponse.json(

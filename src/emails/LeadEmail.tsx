@@ -1,4 +1,3 @@
-import * as React from "react";
 import {
   Html,
   Head,
@@ -12,7 +11,8 @@ import {
 
 interface LeadEmailProps {
   subject: string;
-  body: string;
+  /** HTML déjà sanitizé côté serveur */
+  bodyHtml: string;
   recipientName: string;
   senderName?: string;
   companyName?: string;
@@ -20,7 +20,7 @@ interface LeadEmailProps {
 
 export function LeadEmailTemplate({
   subject,
-  body,
+  bodyHtml,
   recipientName,
   senderName = "Votre équipe commerciale",
   companyName = "Votre CRM",
@@ -57,19 +57,29 @@ export function LeadEmailTemplate({
             Bonjour {recipientName || ","}
           </Text>
 
-          <Section style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-            {body || "(Message vide)"}
+          <Section
+            style={{
+              fontSize: 14,
+              lineHeight: 1.6,
+              color: "#111827",
+            }}
+          >
+            <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
           </Section>
 
           <Text style={{ fontSize: 14, marginTop: 24 }}>
             Bien cordialement,
             <br />
             {senderName}
-            {companyName ? <><br />{companyName}</> : null}
+            {companyName ? (
+              <>
+                <br />
+                {companyName}
+              </>
+            ) : null}
           </Text>
         </Container>
       </Body>
     </Html>
   );
 }
-

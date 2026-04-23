@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { verifyPassword } from '@/lib/password';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -13,14 +14,16 @@ export async function POST(req: Request) {
     const json = await req.json();
     const { email, password } = loginSchema.parse(json);
 
-    // ⚠️ Pour l'instant on compare le mot de passe en clair.
-    // En production, il faudra stocker un hash (bcrypt) et utiliser bcrypt.compare.
     const user = await prisma.user.findFirst({
-      where: { email, password },
+      where: { email },
       include: { company: true },
     });
 
-    if (!user) {
+    const validPassword = user
+      ? await verifyPassword(password, user.password)
+      : false;
+
+    if (!user || !validPassword) {
       return NextResponse.json(
         { error: 'Identifiants invalides' },
         { status: 401 },
@@ -31,7 +34,11 @@ export async function POST(req: Request) {
 
     if (userWithMfa.mfaEnabled) {
       const res = NextResponse.json(
-        { requiresMfa: true, message: 'Vérification MFA requise' },
+        {
+          requiresMfa: true,
+          mustChangePassword: user.mustChangePassword,
+          message: 'Vérification MFA requise',
+        },
         { status: 200 },
       );
       res.cookies.set('mfa_pending', user.id, {
@@ -41,6 +48,17 @@ export async function POST(req: Request) {
         path: '/',
         maxAge: 60 * 5,
       });
+      res.cookies.set(
+        'must_change_password',
+        user.mustChangePassword ? '1' : '0',
+        {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 60 * 60 * 24 * 7,
+        },
+      );
       return res;
     }
 
@@ -49,6 +67,7 @@ export async function POST(req: Request) {
       name: user.name,
       email: user.email,
       role: user.role,
+      mustChangePassword: user.mustChangePassword,
       company: { id: user.company.id, name: user.company.name },
     });
 
@@ -61,6 +80,13 @@ export async function POST(req: Request) {
     });
 
     res.cookies.set('auth_role', user.role, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    res.cookies.set('must_change_password', user.mustChangePassword ? '1' : '0', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

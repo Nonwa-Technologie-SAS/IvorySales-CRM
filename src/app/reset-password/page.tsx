@@ -3,20 +3,47 @@
 import { Field } from "@/components/ui/field";
 import { withOfflineLayout } from "@/components/layouts/withOfflineLayout";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 function ResetPasswordPageInner() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const currentPassword = String(formData.get("currentPassword") ?? "");
+    const newPassword = String(formData.get("password") ?? "");
+    const passwordConfirm = String(formData.get("passwordConfirm") ?? "");
+
+    if (newPassword !== passwordConfirm) {
+      setError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+
     setLoading(true);
-    // TODO: appeler API de réinitialisation réelle avec token
-    setTimeout(() => {
+    setError(null);
+    try {
+      const res = await fetch("/api/profile/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Impossible de changer le mot de passe.");
+      }
       setLoading(false);
       setDone(true);
-    }, 800);
+      setTimeout(() => router.replace("/"), 1000);
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Erreur inattendue.");
+    }
   };
 
   return (
@@ -29,6 +56,14 @@ function ResetPasswordPageInner() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3 mt-2">
+        <Field
+          name="currentPassword"
+          type="password"
+          label="Mot de passe temporaire"
+          placeholder="Votre mot de passe actuel"
+          required
+          minLength={6}
+        />
         <Field
           name="password"
           type="password"
@@ -48,9 +83,10 @@ function ResetPasswordPageInner() {
 
         {done && (
           <p className="text-[11px] text-emerald-600">
-            Mot de passe mis à jour. Vous pouvez maintenant vous connecter.
+            Mot de passe mis à jour. Redirection en cours...
           </p>
         )}
+        {error && <p className="text-[11px] text-rose-600">{error}</p>}
 
         <button
           type="submit"

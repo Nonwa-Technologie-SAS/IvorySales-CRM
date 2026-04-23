@@ -1,10 +1,10 @@
-import { prisma } from '@/lib/prisma';
-import { getCurrentUser } from '@/lib/auth';
 import {
   agentCanModifyLead,
-  getLegacyUnassignedLeadIdsForAgent,
   getLeadIdsWithActivitySinceInCompany,
+  getLegacyUnassignedLeadIdsForAgent,
 } from '@/lib/agentLegacyLeadAccess';
+import { getCurrentUser } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -85,7 +85,10 @@ export async function GET(req: Request) {
         select: { id: true },
       });
       if (!exists) {
-        return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Entreprise introuvable' },
+          { status: 400 },
+        );
       }
       effectiveCompanyId = companyIdParam;
     }
@@ -103,6 +106,7 @@ export async function GET(req: Request) {
       andConditions.push({
         OR: [
           { assignedTo: user.id },
+          { assignedTo: null },
           ...(legacyIds.length ? [{ id: { in: legacyIds } }] : []),
         ],
       });
@@ -129,9 +133,9 @@ export async function GET(req: Request) {
     if (assignedToParam && user.role !== 'AGENT') {
       where.assignedTo = assignedToParam;
     }
-    if (!assignedToParam && user.role !== 'AGENT') {
-      where.assignedTo = '';
-    }
+    // if (!assignedToParam && user.role !== 'AGENT') {
+    //   where.assignedTo = '';
+    // }
 
     if (createdFromParam || createdToParam) {
       const createdAt: { gte?: Date; lte?: Date } = {};
@@ -154,7 +158,9 @@ export async function GET(req: Request) {
       }
     }
 
-    const staleDays = staleDaysParam ? Number.parseInt(staleDaysParam, 10) : NaN;
+    const staleDays = staleDaysParam
+      ? Number.parseInt(staleDaysParam, 10)
+      : NaN;
     if (Number.isFinite(staleDays) && staleDays > 0) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - staleDays);
@@ -231,16 +237,18 @@ export async function POST(req: Request) {
         status: body.status,
         // Traçabilité: si aucun commercial n'est spécifié, on attribue au créateur.
         assignedTo: body.assignedTo ?? user.id,
-        products: body.productIds && body.productIds.length
-          ? {
-              connect: body.productIds.map((id) => ({ id })),
-            }
-          : undefined,
-        services: body.serviceIds && body.serviceIds.length
-          ? {
-              connect: body.serviceIds.map((id) => ({ id })),
-            }
-          : undefined,
+        products:
+          body.productIds && body.productIds.length
+            ? {
+                connect: body.productIds.map((id) => ({ id })),
+              }
+            : undefined,
+        services:
+          body.serviceIds && body.serviceIds.length
+            ? {
+                connect: body.serviceIds.map((id) => ({ id })),
+              }
+            : undefined,
         // On rattache toujours le lead à la société de l'utilisateur connecté.
         companyId: user.companyId,
       },
