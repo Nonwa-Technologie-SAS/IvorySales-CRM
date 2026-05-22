@@ -210,25 +210,46 @@ function LeadsPageInner() {
     }
   }, []);
 
+  // Commerciaux (AGENT) de l'entreprise : pour directrice → entreprise sélectionnée
   useEffect(() => {
     if (!isManagerOrAdmin) return;
+    if (isDirector && !selectedCompanyId) {
+      setUserOptions([]);
+      return;
+    }
+
     (async () => {
       try {
-        const res = await fetch('/api/users');
-        if (!res.ok) return;
+        const qs = new URLSearchParams({ role: 'AGENT' });
+        if (isDirector && selectedCompanyId) {
+          qs.set('companyId', selectedCompanyId);
+        }
+        const res = await fetch(`/api/users?${qs.toString()}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          setUserOptions([]);
+          return;
+        }
         const data = await res.json();
-        setUserOptions(
-          data.map((u: any) => ({
+        const mapped = (Array.isArray(data) ? data : []).map(
+          (u: { id: string; name: string; role: string }) => ({
             id: u.id,
             name: u.name,
             role: u.role,
-          })),
+          }),
+        );
+        setUserOptions(mapped);
+        setFilters((prev) =>
+          prev.assignedTo && !mapped.some((u) => u.id === prev.assignedTo)
+            ? { ...prev, assignedTo: '' }
+            : prev,
         );
       } catch {
-        // silencieux
+        setUserOptions([]);
       }
     })();
-  }, [isManagerOrAdmin]);
+  }, [isManagerOrAdmin, isDirector, selectedCompanyId]);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -433,23 +454,28 @@ function LeadsPageInner() {
 
   return (
     <>
-      <section className='flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-2'>
-        <div>
-          <h1 className='text-xl md:text-2xl font-semibold text-primary'>
+      <section className='mt-2 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+        <div className='min-w-0'>
+          <h1 className='text-xl font-semibold text-primary md:text-2xl'>
             Leads
           </h1>
-          <p className='text-xs md:text-sm text-gray-500'>
+          <p className='text-xs text-gray-500 md:text-sm'>
             Suivez vos prospects à travers le pipeline commercial.
           </p>
         </div>
-        <div className='flex items-center gap-2'>
-          <div className='flex rounded-full bg-white shadow-neu p-0.5'>
+
+        <div className='flex w-full min-w-0 flex-col gap-3 sm:gap-4 lg:w-auto lg:items-end'>
+          <div
+            className='flex shrink-0 self-start rounded-full bg-white p-0.5 shadow-neu'
+            role='group'
+            aria-label="Mode d'affichage"
+          >
             {(['liste', 'kanban', 'grid'] as const).map((mode) => (
               <button
                 key={mode}
                 type='button'
                 onClick={() => setViewMode(mode)}
-                className={`p-2 rounded-full text-xs transition-colors ${
+                className={`rounded-full p-2 text-xs transition-colors ${
                   viewMode === mode
                     ? 'bg-primary text-white shadow-neu'
                     : 'text-gray-500 hover:bg-gray-50'
@@ -461,57 +487,78 @@ function LeadsPageInner() {
                       ? 'Kanban'
                       : 'Grille'
                 }
+                aria-label={
+                  mode === 'liste'
+                    ? 'Liste'
+                    : mode === 'kanban'
+                      ? 'Kanban'
+                      : 'Grille'
+                }
+                aria-pressed={viewMode === mode}
               >
-                {mode === 'liste' && <List className='w-4 h-4' />}
-                {mode === 'kanban' && <Columns3 className='w-4 h-4' />}
-                {mode === 'grid' && <LayoutGrid className='w-4 h-4' />}
+                {mode === 'liste' && <List className='h-4 w-4' />}
+                {mode === 'kanban' && <Columns3 className='h-4 w-4' />}
+                {mode === 'grid' && <LayoutGrid className='h-4 w-4' />}
               </button>
             ))}
           </div>
-          <button
-            type='button'
-            onClick={() => setSheetOpen(true)}
-            className='inline-flex items-center gap-2 px-3 py-2 rounded-full bg-primary text-white text-xs font-medium shadow-neu'
-          >
-            <Plus className='w-3.5 h-3.5' /> Ajouter un lead
-          </button>
-          <button
-            type='button'
-            onClick={() => setImportSheetOpen(true)}
-            className='inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white border border-gray-200 text-gray-700 text-xs font-medium shadow-neu hover:bg-gray-50'
-          >
-            <FileSpreadsheet className='w-3.5 h-3.5' /> Importer Excel
-          </button>
-          <button
-            type='button'
-            onClick={handleExport}
-            disabled={exporting}
-            className='inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white border border-gray-200 text-gray-700 text-xs font-medium shadow-neu hover:bg-gray-50 disabled:opacity-60'
-          >
-            <FileSpreadsheet className='w-3.5 h-3.5' />
-            {exporting ? 'Export...' : 'Exporter les leads'}
-          </button>
+
+          <div className='grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:flex-wrap lg:justify-end'>
+            <button
+              type='button'
+              onClick={() => setSheetOpen(true)}
+              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-xs font-medium text-white shadow-neu sm:col-span-2 lg:col-span-1 lg:w-auto'
+            >
+              <Plus className='h-3.5 w-3.5 shrink-0' /> Ajouter un lead
+            </button>
+            <button
+              type='button'
+              onClick={() => setImportSheetOpen(true)}
+              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-neu hover:bg-gray-50 lg:w-auto'
+            >
+              <FileSpreadsheet className='h-3.5 w-3.5 shrink-0' />
+              <span className='truncate'>Importer Excel</span>
+            </button>
+            <button
+              type='button'
+              onClick={handleExport}
+              disabled={exporting}
+              className='inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-neu hover:bg-gray-50 disabled:opacity-60 sm:col-span-2 lg:col-span-1 lg:w-auto'
+            >
+              <FileSpreadsheet className='h-3.5 w-3.5 shrink-0' />
+              <span className='truncate'>
+                {exporting ? 'Export...' : 'Exporter les leads'}
+              </span>
+            </button>
+          </div>
         </div>
       </section>
 
       <NeumoCard className='mt-4 p-4 bg-white flex flex-col gap-4'>
-        <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3'>
-          <div className='flex items-center gap-2 bg-gray-50 rounded-full px-3 py-1.5 border border-gray-100 text-xs w-full md:w-72'>
-            <Search className='w-4 h-4 text-gray-400' />
+        <div className='flex flex-col gap-4'>
+          <div className='flex w-full min-w-0 items-center gap-2 rounded-full border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs'>
+            <Search className='h-4 w-4 shrink-0 text-gray-400' />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder='Rechercher par nom, email ou téléphone'
-              className='bg-transparent outline-none flex-1 text-[11px] text-gray-700'
+              className='min-w-0 flex-1 bg-transparent text-[11px] text-gray-700 outline-none'
             />
           </div>
-          <div className='flex items-center gap-2 text-[11px] justify-between md:justify-end'>
-            <div className='flex items-center gap-2'>
-              <span className='text-gray-500'>Vues</span>
+
+          <div
+            className={`grid grid-cols-1 gap-3 md:items-end md:gap-3 ${
+              isDirector
+                ? 'md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
+                : 'md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto]'
+            }`}
+          >
+            <label className='flex min-w-0 flex-col gap-1'>
+              <span className='text-[11px] text-gray-500'>Vues</span>
               <select
                 value={selectedViewId}
                 onChange={(e) => handleSelectView(e.target.value)}
-                className='h-8 rounded-full border border-gray-200 bg-white px-2.5 text-[11px] text-gray-700'
+                className='h-9 w-full min-w-0 rounded-full border border-gray-200 bg-white px-3 text-[11px] text-gray-700'
               >
                 <option value='system-all'>Tous les leads</option>
                 <option value='system-follow-up'>Leads à relancer</option>
@@ -524,17 +571,19 @@ function LeadsPageInner() {
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
+
             {isDirector && (
-              <div className='flex items-center gap-2'>
-                <span className='text-gray-500'>Entreprise</span>
+              <label className='flex min-w-0 flex-col gap-1'>
+                <span className='text-[11px] text-gray-500'>Entreprise</span>
                 <select
                   value={selectedCompanyId}
                   onChange={(e) => {
                     setSelectedViewId('system-all');
                     setSelectedCompanyId(e.target.value);
+                    setFilters((prev) => ({ ...prev, assignedTo: '' }));
                   }}
-                  className='h-8 rounded-full border border-gray-200 bg-white px-2.5 text-[11px] text-gray-700 min-w-[160px]'
+                  className='h-9 w-full min-w-0 rounded-full border border-gray-200 bg-white px-3 text-[11px] text-gray-700'
                 >
                   {companyOptions.length === 0 ? (
                     <option value={authUser?.company?.id ?? ''}>
@@ -548,22 +597,31 @@ function LeadsPageInner() {
                     ))
                   )}
                 </select>
-              </div>
+              </label>
             )}
-            <button
-              type='button'
-              onClick={handleSaveCurrentView}
-              className='px-3 py-1.5 rounded-full bg-gray-100 border border-gray-200 text-[11px] text-gray-700 hover:bg-gray-50'
+
+            <div
+              className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap ${
+                isDirector
+                  ? 'md:col-span-2 lg:col-span-1 lg:flex-nowrap lg:justify-end'
+                  : 'md:col-span-2 lg:col-span-1 lg:flex-nowrap lg:justify-end'
+              }`}
             >
-              Enregistrer la vue
-            </button>
-            <button
-              type='button'
-              onClick={() => setShowFilters((prev) => !prev)}
-              className='md:hidden px-3 py-1.5 rounded-full bg-gray-100 border border-gray-200 text-[11px] text-gray-700'
-            >
-              {showFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
-            </button>
+              <button
+                type='button'
+                onClick={handleSaveCurrentView}
+                className='h-9 w-full shrink-0 rounded-full border border-gray-200 bg-gray-100 px-3 text-[11px] text-gray-700 hover:bg-gray-50 sm:w-auto'
+              >
+                Enregistrer la vue
+              </button>
+              <button
+                type='button'
+                onClick={() => setShowFilters((prev) => !prev)}
+                className='h-9 w-full shrink-0 rounded-full border border-gray-200 bg-gray-100 px-3 text-[11px] text-gray-700 md:hidden sm:w-auto'
+              >
+                {showFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -591,7 +649,7 @@ function LeadsPageInner() {
               );
             })}
           </div>
-          <div className='grid grid-cols-1 md:grid-cols-4 gap-3 text-[11px]'>
+          <div className='grid grid-cols-1 gap-3 text-[11px] sm:grid-cols-2 xl:grid-cols-4'>
             <div className='flex flex-col gap-1'>
               <span className='text-gray-500'>Source</span>
               <input
@@ -628,9 +686,9 @@ function LeadsPageInner() {
                 </select>
               </div>
             )}
-            <div className='flex flex-col gap-1'>
+            <div className='flex flex-col gap-1 sm:col-span-2 xl:col-span-1'>
               <span className='text-gray-500'>Date de création</span>
-              <div className='flex items-center gap-1'>
+              <div className='flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-1'>
                 <input
                   type='date'
                   value={filters.createdFrom}
@@ -641,9 +699,11 @@ function LeadsPageInner() {
                       createdFrom: e.target.value,
                     }));
                   }}
-                  className='h-8 rounded-full border border-gray-200 bg-white px-2 text-[11px] text-gray-700 flex-1'
+                  className='h-8 min-w-0 flex-1 rounded-full border border-gray-200 bg-white px-2 text-[11px] text-gray-700'
                 />
-                <span className='text-gray-400 text-[10px]'>au</span>
+                <span className='shrink-0 text-center text-[10px] text-gray-400 sm:px-0.5'>
+                  au
+                </span>
                 <input
                   type='date'
                   value={filters.createdTo}
@@ -654,7 +714,7 @@ function LeadsPageInner() {
                       createdTo: e.target.value,
                     }));
                   }}
-                  className='h-8 rounded-full border border-gray-200 bg-white px-2 text-[11px] text-gray-700 flex-1'
+                  className='h-8 min-w-0 flex-1 rounded-full border border-gray-200 bg-white px-2 text-[11px] text-gray-700'
                 />
               </div>
             </div>

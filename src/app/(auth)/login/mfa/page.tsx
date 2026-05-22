@@ -2,14 +2,12 @@
 
 import { withOfflineLayout } from "@/components/layouts/withOfflineLayout";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { Smartphone } from "lucide-react";
 
-function LoginMfaPageInner() {
+function LoginMfaPageInner({ from }: { from: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const from = searchParams.get("from") || "/";
 
   const [pending, setPending] = useState<boolean | null>(null);
   const [emailMasked, setEmailMasked] = useState("");
@@ -134,7 +132,12 @@ function LoginMfaPageInner() {
   );
 }
 
-function LoginMfaPageWithSearchParams() {
+function LoginMfaPageWithSearchParams({
+  searchParams,
+}: {
+  searchParams?: { from?: string };
+}) {
+  const from = searchParams?.from;
   return (
     <Suspense
       fallback={
@@ -143,7 +146,7 @@ function LoginMfaPageWithSearchParams() {
         </div>
       }
     >
-      <LoginMfaPageInner />
+      <LoginMfaPageInner from={from || "/"} />
     </Suspense>
   );
 }

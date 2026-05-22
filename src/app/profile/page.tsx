@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from "react";
 import NeumoCard from "@/components/NeumoCard";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSearchParams } from "next/navigation";
 import { isAdminOrManagerLike } from "@/lib/roles";
 import {
   Mail,
@@ -31,10 +30,13 @@ interface GoalWithRealized {
   realizedRevenue: number;
 }
 
-function ProfilePageInner() {
+function ProfilePageInner({
+  viewedUserId: viewedUserIdProp,
+}: {
+  viewedUserId?: string | null;
+}) {
   const { user: authUser } = useAuth();
-  const searchParams = useSearchParams();
-  const viewedUserId = searchParams.get("userId");
+  const viewedUserId = viewedUserIdProp ?? null;
   const [user, setUser] = useState<{
     name: string;
     email: string;
@@ -890,7 +892,12 @@ function ProfilePageInner() {
   );
 }
 
-function ProfilePageWithSearchParams() {
+function ProfilePageWithSearchParams({
+  searchParams,
+}: {
+  searchParams?: { userId?: string };
+}) {
+  const userId = searchParams?.userId;
   return (
     <Suspense
       fallback={
@@ -899,7 +906,7 @@ function ProfilePageWithSearchParams() {
         </div>
       }
     >
-      <ProfilePageInner />
+      <ProfilePageInner viewedUserId={userId ?? null} />
     </Suspense>
   );
 }

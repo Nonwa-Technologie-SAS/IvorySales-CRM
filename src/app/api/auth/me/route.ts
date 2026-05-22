@@ -38,7 +38,7 @@ export async function GET() {
       role: user.role,
       mustChangePassword: user.mustChangePassword,
       mfaEnabled: u.mfaEnabled ?? false,
-      mfaSetupPending: !!u.mfaSecret && !u.mfaEnabled,
+      mfaSetupPending: !!u.mfaSecret && !u.mfaEnabled,  
       company: user.company,
     });
   } catch (error) {

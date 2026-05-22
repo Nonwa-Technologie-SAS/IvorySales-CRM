@@ -8,7 +8,7 @@ import { BarChart3, BookOpen, Building2, CalendarDays, LayoutGrid, Package, Sett
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
-type SidebarItemDef = {
+export type SidebarItemDef = {
   icon: typeof LayoutGrid;
   label: string;
   href: string;
@@ -35,6 +35,23 @@ export function getSidebarItemsForRole(role: FrontendRole | null): SidebarItemDe
   return sidebarItems.filter(
     (item) => !item.allowedRoles || item.allowedRoles.includes(role)
   );
+}
+
+/** Routes déjà présentes dans la barre d’onglets mobile (exclues du drawer). */
+export const MOBILE_PRIMARY_NAV_HREFS = [
+  '/',
+  '/agenda',
+  '/leads',
+  '/clients',
+  '/stats',
+] as const;
+
+/** Menus secondaires pour le drawer mobile (sidebar − navigation principale mobile). */
+export function getSecondaryNavItemsForRole(
+  role: FrontendRole | null,
+): SidebarItemDef[] {
+  const primary = new Set<string>(MOBILE_PRIMARY_NAV_HREFS);
+  return getSidebarItemsForRole(role).filter((item) => !primary.has(item.href));
 }
 
 export default function Sidebar() {

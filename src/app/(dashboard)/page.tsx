@@ -1,9 +1,8 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
-import Navbar from "@/components/Navbar";
+import DashboardShell from "@/components/layouts/DashboardShell";
 import NeumoCard from "@/components/NeumoCard";
-import Sidebar from "@/components/Sidebar";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import {
   ChartPieDonut,
@@ -158,22 +157,14 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col sm:flex-row bg-bgGray">
-        <Sidebar />
-        <main className="flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full">
-          <Navbar />
-          <SkeletonLoader />
-        </main>
-      </div>
+      <DashboardShell>
+        <SkeletonLoader />
+      </DashboardShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col sm:flex-row bg-bgGray">
-      <Sidebar />
-      <main className="flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full">
-        <Navbar />
-
+    <DashboardShell>
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <NeumoCard className="p-4 bg-linear-to-br from-primary/5 via-white to-indigo-50 flex flex-col gap-1 border border-primary/10 shadow-neu-soft">
             <span className="text-[11px] text-gray-500">Total prospects</span>
@@ -419,8 +410,7 @@ export default function DashboardPage() {
             </NeumoCard>
           </section>
         )}
-      </main>
-    </div>
+    </DashboardShell>
   );
 }
 

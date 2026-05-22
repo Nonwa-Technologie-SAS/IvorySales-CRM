@@ -14,11 +14,11 @@ export const SheetContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" />
+    <DialogPrimitive.Overlay className="fixed inset-0 z-[55] bg-black/20 backdrop-blur-sm" />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-neu-soft px-4 py-5 outline-none",
+        "fixed inset-y-0 right-0 z-[60] w-full max-w-md bg-white shadow-neu-soft px-4 py-5 outline-none",
         "border-l border-gray-100 flex flex-col gap-4",
         className,
       )}

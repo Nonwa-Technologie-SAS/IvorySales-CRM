@@ -46,7 +46,7 @@ export default function Navbar() {
   };
 
   return (
-    <header className='flex items-center justify-between pb-4 bg-transparent'>
+    <header className='hidden sm:flex items-center justify-between pb-4 bg-transparent'>
       <div className='flex items-start gap-3'>
         <Image
           src='/kpitracker-mark.svg'

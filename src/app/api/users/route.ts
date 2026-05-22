@@ -26,8 +26,16 @@ const updateUserSchema = z.object({
     .optional(),
 });
 
+const userRoleFilterSchema = z.enum([
+  'ADMIN',
+  'MANAGER',
+  'DIRECTRICE_COMMERCIALE',
+  'AGENT',
+]);
+
 /** GET : liste des utilisateurs — ADMIN/MANAGER/DIRECTRICE (AGENT n'a pas accès).
  *  DIRECTRICE uniquement : ?companyId= pour cibler une entreprise existante (lecture).
+ *  ?role=AGENT (etc.) pour filtrer par rôle (ex. liste des commerciaux).
  */
 export async function GET(req: NextRequest) {
   const auth = await requireRole(['ADMIN', 'MANAGER']);
@@ -69,10 +77,26 @@ export async function GET(req: NextRequest) {
       filterCompanyId = target.id;
     }
 
+    const roleParam = req.nextUrl.searchParams.get('role');
+    let roleFilter: Role | undefined;
+    if (roleParam) {
+      const parsed = userRoleFilterSchema.safeParse(roleParam);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: 'Rôle de filtre invalide' },
+          { status: 400 },
+        );
+      }
+      roleFilter = parsed.data;
+    }
+
     const users = await prisma.user.findMany({
-      where: { companyId: filterCompanyId },
+      where: {
+        companyId: filterCompanyId,
+        ...(roleFilter ? { role: roleFilter } : {}),
+      },
       include: { company: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { name: 'asc' },
     });
     return NextResponse.json(users);
   } catch (error) {

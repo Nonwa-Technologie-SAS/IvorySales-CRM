@@ -14,15 +14,13 @@ import LeadInterestsEstimatorCard, {
   type InterestsPayloadItem,
 } from '@/components/LeadInterestsEstimatorCard';
 import MeetingsTabContent from '@/components/MeetingsTabContent';
-import Navbar from '@/components/Navbar';
+import DashboardShell from '@/components/layouts/DashboardShell';
 import NeumoCard from '@/components/NeumoCard';
-import Sidebar from '@/components/Sidebar';
 import SkeletonLoader from '@/components/SkeletonLoader';
 import { ArrowLeft, Building2, Check, ChevronDown, Search } from 'lucide-react';
 import { CONVERT_REQUIRES_PIVOT_INTERESTS_MESSAGE } from '@/lib/lead-conversion';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, use } from 'react';
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: 'Nouveau lead',
@@ -145,9 +143,17 @@ function leadServiceInterestSummary(lead: LeadDetail): string {
   return '—';
 }
 
-export default function LeadDetailPage() {
-  const params = useParams();
-  const id = params?.id as string;
+type LeadDetailPageProps = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default function LeadDetailPage({
+  params,
+  searchParams,
+}: LeadDetailPageProps) {
+  const { id } = use(params);
+  if (searchParams) use(searchParams);
 
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -348,10 +354,7 @@ export default function LeadDetailPage() {
 
   if (loading) {
     return (
-      <div className='min-h-screen flex bg-bgGray'>
-        <Sidebar />
-        <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full'>
-          <Navbar />
+      <DashboardShell>
           <div className='flex-1 flex flex-col gap-4 mt-2'>
             {/* Skeleton : bandeau Détails du lead + cycle de vie */}
             <NeumoCard className='p-4'>
@@ -463,17 +466,13 @@ export default function LeadDetailPage() {
               </div>
             </div>
           </div>
-        </main>
-      </div>
+      </DashboardShell>
     );
   }
 
   if (!lead) {
     return (
-      <div className='min-h-screen flex bg-bgGray'>
-        <Sidebar />
-        <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full'>
-          <Navbar />
+      <DashboardShell>
           <div className='flex-1 flex flex-col items-center justify-center gap-4'>
             <p className='text-sm text-gray-500'>Lead introuvable.</p>
             <Link
@@ -483,8 +482,7 @@ export default function LeadDetailPage() {
               <ArrowLeft className='w-4 h-4' /> Retour aux leads
             </Link>
           </div>
-        </main>
-      </div>
+      </DashboardShell>
     );
   }
 
@@ -590,10 +588,7 @@ export default function LeadDetailPage() {
   };
 
   return (
-    <div className='min-h-screen flex bg-bgGray'>
-      <Sidebar />
-      <main className='flex-1 flex flex-col max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8 gap-4 w-full'>
-        <Navbar />
+    <DashboardShell>
         {/* Section Détails du lead - Cycle de vie */}
         <NeumoCard className='p-4 mt-2'>
           <div className='flex flex-col gap-3'>
@@ -1062,7 +1057,6 @@ export default function LeadDetailPage() {
             <LeadAttachmentsBlock leadId={lead.id} />
           </div>
         </div>
-      </main>
 
       <LeadEditSheet
         open={editOpen}
@@ -1087,6 +1081,6 @@ export default function LeadDetailPage() {
           )
         }
       />
-    </div>
+    </DashboardShell>
   );
 }
