@@ -1,5 +1,7 @@
 "use client";
 
+import type { FrontendRole } from "@/contexts/AuthContext";
+import { USER_ROLE_FORM_OPTIONS, frontendRoleToApi } from "@/lib/roles";
 import { useState, type FormEvent } from "react";
 import NeumoCard from "./NeumoCard";
 import UserRoleBadge from "./UserRoleBadge";
@@ -11,7 +13,7 @@ interface UserCreateSheetProps {
     id: string;
     name: string;
     email: string;
-    role: "admin" | "manager" | "directrice_commerciale" | "agent";
+    role: FrontendRole;
   }) => void;
 }
 
@@ -20,7 +22,7 @@ export default function UserCreateSheet({
   onClose,
   onCreated,
 }: UserCreateSheetProps) {
-  const [role, setRole] = useState<"admin" | "manager" | "directrice_commerciale" | "agent">("agent");
+  const [role, setRole] = useState<FrontendRole>("agent");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +47,7 @@ export default function UserCreateSheet({
           name,
           email,
           password,
-          role: role.toUpperCase(), // API attend ADMIN | MANAGER | DIRECTRICE_COMMERCIALE | AGENT
+          role: frontendRoleToApi(role),
         }),
       });
 
@@ -130,12 +132,7 @@ export default function UserCreateSheet({
               <div className="flex flex-col gap-2 mt-1">
                 <span className="text-[11px] text-gray-500">Rôle</span>
                 <div className="flex gap-2">
-                  {([
-                    ["agent", "Commercial"],
-                    ["manager", "Manager"],
-                    ["directrice_commerciale", "Directrice commerciale"],
-                    ["admin", "Admin"],
-                  ] as const).map(([value, label]) => (
+                  {USER_ROLE_FORM_OPTIONS.map(([value, label]) => (
                     <button
                       key={value}
                       type="button"

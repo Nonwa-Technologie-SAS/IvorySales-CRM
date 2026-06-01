@@ -1,5 +1,6 @@
 'use client';
 
+import { normalizeFrontendRole } from '@/lib/roles';
 import {
   createContext,
   useCallback,
@@ -10,8 +11,14 @@ import {
   type ReactNode,
 } from 'react';
 
-/** Rôle côté frontend (aligné avec la règle roles-and-permissions : admin, manager, agent). */
-export type FrontendRole = 'admin' | 'manager' | 'directrice_commerciale' | 'agent';
+/** Rôle côté frontend (aligné avec l’enum Prisma, en snake_case). */
+export type FrontendRole =
+  | 'admin'
+  | 'manager'
+  | 'directrice_commerciale'
+  | 'pdg'
+  | 'directrice_operation'
+  | 'agent';
 
 export interface AuthUser {
   id: string;
@@ -44,17 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       const data = await res.json();
-      const role = (data.role?.toLowerCase?.() ?? 'agent') as FrontendRole;
+      const role = normalizeFrontendRole(data.role);
       setUser({
         id: data.id,
         name: data.name,
         email: data.email,
-        role:
-          role === 'admin'
-            ? 'admin'
-            : role === 'manager' || role === 'directrice_commerciale'
-              ? role
-              : 'agent',
+        role,
         mfaEnabled: data.mfaEnabled ?? false,
         company: data.company,
       });

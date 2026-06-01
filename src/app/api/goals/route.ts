@@ -1,4 +1,5 @@
 import { getCurrentUser, requireRole, resolveGroupCompanyScope } from '@/lib/auth';
+import { GROUP_SCOPE_ROLES, hasGroupCompanyScope } from '@/lib/group-scope-roles';
 import { sendGoalAssignmentEmails } from '@/lib/goal-email';
 import { getPeriodBounds, getPeriodLabel } from '@/lib/goalPeriods';
 import { prisma } from '@/lib/prisma';
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
           select: { email: true },
         }),
         prisma.user.findMany({
-          where: { role: 'DIRECTRICE_COMMERCIALE' },
+          where: { role: { in: [...GROUP_SCOPE_ROLES] } },
           select: { email: true },
         }),
       ]);
@@ -162,7 +163,7 @@ export async function GET(req: Request) {
   const yearParam = url.searchParams.get('year');
 
   let scopeCompanyId = currentUser.companyId;
-  if (currentUser.role === 'DIRECTRICE_COMMERCIALE') {
+  if (hasGroupCompanyScope(currentUser.role)) {
     const scope = await resolveGroupCompanyScope(
       currentUser,
       url.searchParams.get('companyId'),

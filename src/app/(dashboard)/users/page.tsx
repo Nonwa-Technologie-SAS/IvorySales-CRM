@@ -5,7 +5,13 @@ import { GoalSetSheet } from '@/components/GoalSetSheet';
 import UserCreateSheet from '@/components/UserCreateSheet';
 import UserRoleBadge from '@/components/UserRoleBadge';
 import { UserEditSheet } from '@/components/UserEditSheet';
+import type { FrontendRole } from '@/contexts/AuthContext';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  USER_ROLE_FILTER_OPTIONS,
+  isAdminOrManagerLike,
+  normalizeFrontendRole,
+} from '@/lib/roles';
 import { withDashboardLayout } from '@/components/layouts/withDashboardLayout';
 import { MoreHorizontal, Plus, Search } from 'lucide-react';
 import {
@@ -22,7 +28,7 @@ interface UserRow {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'directrice_commerciale' | 'agent';
+  role: FrontendRole;
   status: 'active' | 'invited' | 'suspended';
   lastLogin: string;
 }
@@ -32,9 +38,7 @@ function UsersPageInner() {
   const { user: authUser, loading } = useAuth();
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [roleFilter, setRoleFilter] = useState<
-    'all' | 'admin' | 'manager' | 'directrice_commerciale' | 'agent'
-  >('all');
+  const [roleFilter, setRoleFilter] = useState<FrontendRole | 'all'>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [goalUser, setGoalUser] = useState<UserRow | null>(null);
@@ -74,7 +78,7 @@ function UsersPageInner() {
           id: u.id,
           name: u.name,
           email: u.email,
-          role: (u.role?.toLowerCase?.() ?? 'agent') as UserRow['role'],
+          role: normalizeFrontendRole(u.role),
           status: 'active',
           lastLogin: new Date(u.createdAt).toLocaleString('fr-FR'),
         }));
@@ -110,7 +114,7 @@ function UsersPageInner() {
             Gérez les comptes, les rôles et les droits d'accès de votre équipe.
           </p>
         </div>
-        {(authUser.role === 'admin' || authUser.role === 'manager' || authUser.role === 'directrice_commerciale') && (
+        {isAdminOrManagerLike(authUser.role) && (
           <button
             type='button'
             onClick={() => setCreateOpen(true)}
@@ -134,19 +138,19 @@ function UsersPageInner() {
             />
           </div>
           <div className='flex items-center gap-1 text-[11px] bg-gray-50 rounded-full p-1 border border-gray-100 w-fit'>
-            {['all', 'admin', 'manager', 'directrice_commerciale', 'agent'].map((role) => (
+            {USER_ROLE_FILTER_OPTIONS.map(([role, label]) => (
               <button
                 key={role}
                 type='button'
-                onClick={() => setRoleFilter(role as any)}
-                className={`px-3 py-1 rounded-full capitalize transition-colors ${
+                onClick={() => setRoleFilter(role)}
+                className={`px-3 py-1 rounded-full transition-colors ${
                   roleFilter === role
                     ? 'bg-white text-primary shadow-neu'
                     : 'text-gray-500 hover:text-primary'
                 }`}
                 disabled={usersLoading}
               >
-                {role === 'all' ? 'Tous' : role}
+                {label}
               </button>
             ))}
           </div>
@@ -256,7 +260,7 @@ function UsersPageInner() {
                           >
                             Voir
                           </DropdownMenuItem>
-                          {(authUser.role === 'admin' || authUser.role === 'manager' || authUser.role === 'directrice_commerciale') && (
+                          {isAdminOrManagerLike(authUser.role) && (
                             <>
                               {user.role === 'agent' && (
                                 <DropdownMenuItem

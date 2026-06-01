@@ -1,12 +1,19 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { hasGroupCompanyScope } from "@/lib/group-scope-roles";
 import { prisma } from "@/lib/prisma";
 
-export type Role = "ADMIN" | "MANAGER" | "DIRECTRICE_COMMERCIALE" | "AGENT";
+export type Role =
+  | "ADMIN"
+  | "MANAGER"
+  | "DIRECTRICE_COMMERCIALE"
+  | "PDG"
+  | "DIRECTRICE_OPERATION"
+  | "AGENT";
 
 function effectiveRoleForPermissions(role: Role): Role {
-  // DIRECTRICE_COMMERCIALE a les mêmes droits qu’un MANAGER
-  return role === "DIRECTRICE_COMMERCIALE" ? "MANAGER" : role;
+  if (hasGroupCompanyScope(role)) return "MANAGER";
+  return role;
 }
 
 export interface AuthUser {
@@ -75,7 +82,8 @@ export async function requireRole(
 
 /**
  * Périmètre entreprise pour rapports / objectifs : ADMIN & MANAGER restent sur leur société.
- * DIRECTRICE_COMMERCIALE : sans companyId en query → société rattachée ; avec companyId → même règle que GET /api/leads (entreprise doit exister).
+ * Rôles groupe (directrice, PDG, directrice opération) : sans companyId → société rattachée ;
+ * avec companyId → entreprise ciblée si elle existe.
  */
 export async function resolveGroupCompanyScope(
   user: AuthUser,
@@ -87,7 +95,7 @@ export async function resolveGroupCompanyScope(
       { status: 403 },
     );
   }
-  if (user.role !== "DIRECTRICE_COMMERCIALE") {
+  if (!hasGroupCompanyScope(user.role)) {
     return { companyId: user.companyId };
   }
   const requested = companyIdParam?.trim() ?? "";

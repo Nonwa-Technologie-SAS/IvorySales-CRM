@@ -1,9 +1,10 @@
 'use client';
 
 import NeumoCard from '@/components/NeumoCard';
+import { LeadDemographicsSection } from '@/components/stats/LeadDemographicsSection';
 import { withDashboardLayout } from '@/components/layouts/withDashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { isAdminOrManagerLike } from '@/lib/roles';
+import { hasGroupCompanyScopeFrontend, isAdminOrManagerLike } from '@/lib/roles';
 import { Target, TrendingUp, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -91,13 +92,13 @@ function StatsPageInner() {
   /** Directrice : '' = pas de companyId en query (API = société rattachée) */
   const [reportCompanyId, setReportCompanyId] = useState('');
 
-  const isDirector = authUser?.role === 'directrice_commerciale';
+  const hasGroupScope = hasGroupCompanyScopeFrontend(authUser?.role);
 
   const fetchGoals = useCallback(async (withLoading: boolean = false) => {
     try {
       if (withLoading) setLoading(true);
       const url =
-        isDirector && reportCompanyId.trim()
+        hasGroupScope && reportCompanyId.trim()
           ? `/api/goals?companyId=${encodeURIComponent(reportCompanyId)}`
           : '/api/goals';
       const res = await fetch(url, { cache: 'no-store' });
@@ -109,7 +110,7 @@ function StatsPageInner() {
     } finally {
       if (withLoading) setLoading(false);
     }
-  }, [isDirector, reportCompanyId]);
+  }, [hasGroupScope, reportCompanyId]);
 
   // Objectifs (tableau + cartes) : même périmètre entreprise que le reste pour la directrice
   useEffect(() => {
@@ -125,7 +126,7 @@ function StatsPageInner() {
       try {
         setLoadingCurrentGoals(true);
         const params = new URLSearchParams();
-        if (isDirector && reportCompanyId) {
+        if (hasGroupScope && reportCompanyId) {
           params.set('companyId', reportCompanyId);
         }
         const q = params.toString();
@@ -146,7 +147,7 @@ function StatsPageInner() {
     };
 
     void fetchCurrentGoals();
-  }, [authUser?.role, isDirector, reportCompanyId]);
+  }, [authUser?.role, hasGroupScope, reportCompanyId]);
 
   // Rafraîchir les objectifs quand une conversion a eu lieu (événement global)
   useEffect(() => {
@@ -159,7 +160,7 @@ function StatsPageInner() {
 
   // Liste entreprises du groupe uniquement (directrice) — même règle que la page Leads
   useEffect(() => {
-    if (!isDirector) return;
+    if (!hasGroupScope) return;
     const load = async () => {
       try {
         const res = await fetch('/api/companies', { cache: 'no-store' });
@@ -181,18 +182,18 @@ function StatsPageInner() {
       }
     };
     void load();
-  }, [isDirector]);
+  }, [hasGroupScope]);
 
   // Si l’entreprise choisie n’est plus dans la liste (ex. société cliente), revenir au périmètre par défaut
   useEffect(() => {
-    if (!isDirector || !reportCompanyId) return;
+    if (!hasGroupScope || !reportCompanyId) return;
     if (companyOptions.length === 0) return;
     if (!companyOptions.some((c) => c.id === reportCompanyId)) {
       setReportCompanyId('');
       setReportUserId('');
       setReport(null);
     }
-  }, [isDirector, reportCompanyId, companyOptions]);
+  }, [hasGroupScope, reportCompanyId, companyOptions]);
 
   // Charger la liste des utilisateurs pour le filtre "Commercial" (rapports)
   useEffect(() => {
@@ -201,7 +202,7 @@ function StatsPageInner() {
     const fetchUsers = async () => {
       try {
         const url =
-          isDirector && reportCompanyId
+          hasGroupScope && reportCompanyId
             ? `/api/users?companyId=${encodeURIComponent(reportCompanyId)}`
             : '/api/users';
         const res = await fetch(url, { cache: 'no-store' });
@@ -221,9 +222,19 @@ function StatsPageInner() {
       }
     };
     void fetchUsers();
-  }, [authUser?.role, isDirector, reportCompanyId]);
+  }, [authUser?.role, hasGroupScope, reportCompanyId]);
 
   const isManagerOrAdmin = isAdminOrManagerLike(authUser?.role);
+  const demographicsCompanyId =
+    hasGroupScope && reportCompanyId.trim()
+      ? reportCompanyId.trim()
+      : undefined;
+  const demographicsScopeLabel = hasGroupScope
+    ? reportCompanyId.trim()
+      ? (companyOptions.find((c) => c.id === reportCompanyId)?.name ??
+        'entreprise sélectionnée')
+      : 'périmètre par défaut (ma société)'
+    : undefined;
   const isAgent = authUser?.role === 'agent';
   const currentPeriodGoal =
     isAgent && goals.length > 0
@@ -270,7 +281,7 @@ function StatsPageInner() {
       const params = new URLSearchParams({ from: reportFrom, to: reportTo });
       if (reportUserId.trim()) params.set('userId', reportUserId);
       if (reportSource.trim()) params.set('source', reportSource);
-      if (isDirector && reportCompanyId.trim()) {
+      if (hasGroupScope && reportCompanyId.trim()) {
         params.set('companyId', reportCompanyId);
       }
       const res = await fetch(
@@ -299,7 +310,7 @@ function StatsPageInner() {
     const params = new URLSearchParams({ from: reportFrom, to: reportTo });
     if (reportUserId.trim()) params.set('userId', reportUserId);
     if (reportSource.trim()) params.set('source', reportSource);
-    if (isDirector && reportCompanyId.trim()) {
+    if (hasGroupScope && reportCompanyId.trim()) {
       params.set('companyId', reportCompanyId);
     }
     try {
@@ -334,7 +345,7 @@ function StatsPageInner() {
             objectifs.
           </p>
         </div>
-        {isDirector && (
+        {hasGroupScope && (
           <div className='flex flex-col gap-1 min-w-[200px]'>
             <label className='text-[11px] text-gray-500'>
               Entreprise (toute la page)
@@ -360,6 +371,13 @@ function StatsPageInner() {
           </div>
         )}
       </section>
+
+      {isManagerOrAdmin && (
+        <LeadDemographicsSection
+          companyId={demographicsCompanyId}
+          scopeLabel={demographicsScopeLabel}
+        />
+      )}
 
       {isManagerOrAdmin && (
         <section className='mt-4'>

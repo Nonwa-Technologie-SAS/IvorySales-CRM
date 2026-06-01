@@ -14,7 +14,7 @@ type AgendaItemWhereInput = NonNullable<
  * - MANAGER / ADMIN :
  *    - par défaut : toutes les tâches créées par des utilisateurs de la société
  *    - si userId est fourni : uniquement les tâches créées par cet utilisateur (même société)
- * - DIRECTRICE_COMMERCIALE : ?companyId= optionnel (aligné /api/leads) pour cibler une autre entreprise
+ * - Rôles groupe (directrice commerciale, PDG, directrice opération) : ?companyId= optionnel (aligné /api/leads)
  */
 export async function GET(req: Request) {
   try {

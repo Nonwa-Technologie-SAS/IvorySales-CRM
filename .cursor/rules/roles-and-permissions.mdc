@@ -1,5 +1,5 @@
 ---
-description: Règles de rôles et permissions (ADMIN, MANAGER, AGENT) pour le CRM
+description: Règles de rôles et permissions pour le CRM IvorySales
 alwaysApply: true
 ---
 
@@ -13,49 +13,42 @@ alwaysApply: true
   - Peut modifier les rôles et les paramètres de l’entreprise.
 
 - **MANAGER (manager)**
-  - Accès à la vision d’équipe (deals, activités, rapports d’équipe).
+  - Accès à la vision d’équipe (deals, activités, rapports d’équipe) **sur sa société uniquement**.
   - Peut gérer les commerciaux (AGENT) de son équipe si la logique métier le permet.
   - Ne doit pas pouvoir modifier/supprimer un ADMIN ni gérer le plan global.
 
+- **Rôles « périmètre groupe »** — même niveau d’accès UI/API que la directrice commerciale :
+  - **DIRECTRICE_COMMERCIALE** (`directrice_commerciale`)
+  - **PDG** (`pdg`)
+  - **DIRECTRICE_OPERATION** (`directrice_operation`)
+  - Droits équivalents à un MANAGER pour `requireRole(['ADMIN', 'MANAGER'])` (via `effectiveRoleForPermissions`).
+  - Vision **multi-entreprises** : filtre `?companyId=`, stats/leads/agenda avec sélecteur d’entreprise, accès aux leads de toutes les sociétés du groupe.
+  - Helpers : `hasGroupCompanyScope()` (backend), `hasGroupCompanyScopeFrontend()` (frontend), constantes `GROUP_SCOPE_ROLES` / `GROUP_SCOPE_FRONTEND_ROLES`.
+
 - **AGENT (commercial / agent)**
-  - Voit et gère principalement **ses/son** prospects, clients, deals, agenda, activités, uploader les pièces jointe de ces prospects et profil.
+  - Voit et gère principalement **ses/son** prospects, clients, deals, agenda, activités, pièces jointes et profil.
   - N’a pas accès à la gestion des utilisateurs ni aux paramètres globaux.
 
 ## Bonnes pratiques backend
 
-- **Toujours vérifier l’authentification et le rôle côté API** avant d’exécuter une action sensible :
-  - Lecture globale d’utilisateurs, modification de rôles, suppression d’utilisateurs.
-  - Actions impactant l’entreprise (plan, paramètres globaux).
-- Utiliser un helper du type `getCurrentUser()` + `hasRole()` pour centraliser la logique.
-- Retourner **403** (`Accès refusé`) si l’utilisateur n’a pas le rôle nécessaire, même s’il est connecté.
+- **Toujours vérifier l’authentification et le rôle côté API** avant d’exécuter une action sensible.
+- Utiliser `getCurrentUser()`, `requireRole()`, `hasGroupCompanyScope()` et `resolveGroupCompanyScope()`.
+- Retourner **403** (`Accès refusé`) si l’utilisateur n’a pas le rôle nécessaire.
 
 ### Exemples d’autorisations (intention métier)
 
-- **/api/users**
-  - `GET` : réservé à `ADMIN` (et éventuellement `MANAGER` si tu veux qu’il voie la liste).
-  - `POST`, `PATCH`, `DELETE` : réservé à `ADMIN` uniquement.
-
-- **/api/companies** (paramétrage entreprise, plan)
-  - Toutes les opérations critiques (changement de plan, suppression, config globale) : `ADMIN` uniquement.
-
-- **Modules commerciaux (deals, contacts, emails)**
-  - `AGENT` : accès à ses propres données.
-  - `MANAGER` : accès aux données de son équipe.
-  - `ADMIN` : accès global.
+- **/api/users** : `GET` / `POST` / `PATCH` / `DELETE` via `requireRole(['ADMIN', 'MANAGER'])` ; filtre `?companyId=` réservé aux rôles groupe.
+- **/api/leads**, **objectifs**, **dashboard** : périmètre entreprise via `resolveGroupCompanyScope` pour les rôles groupe.
+- **Modules commerciaux** : `AGENT` = ses données ; `MANAGER` = son entreprise ; rôles groupe = entreprise(s) sélectionnée(s) ; `ADMIN` = global selon le module.
 
 ## Bonnes pratiques frontend
 
-- **Ne jamais se fier uniquement au front pour la sécurité** : le backend doit toujours filtrer/valider.
-- Utiliser un contexte d’auth (`AuthProvider` + `useAuth()`) pour exposer `user.role` (`admin | manager | agent`).
-- Cacher ou désactiver les boutons/actions qu’un rôle ne doit pas utiliser, par exemple :
-  - Bouton “Ajouter un utilisateur” visible seulement pour `admin`.
-  - Bouton “Supprimer l’utilisateur” visible seulement pour `admin`.
-- Optionnel : ajouter des gardes de route (layout/middleware) pour bloquer
-  l’accès complet à certaines pages (ex. page “Utilisateurs” interdite à `agent`).
+- Ne jamais se fier uniquement au front : le backend filtre toujours.
+- `AuthProvider` + `normalizeFrontendRole()` pour mapper les rôles API → `FrontendRole`.
+- Navigation restreinte : `GROUP_NAV_ROLES` dans la sidebar ; middleware sur `/users`, `/settings`, `/products-services`.
 
 ## Alignement des rôles entre back et front
 
-- **Backend / DB** : `ADMIN`, `MANAGER`, `AGENT`.
-- **Frontend** : `admin`, `manager`, `agent` (avec le label “Commercial” pour `agent`).
-- Toujours mapper correctement : ne pas introduire de rôles supplémentaires sans
-  les ajouter dans les schémas Zod et dans Prisma.
+- **Backend / DB** : `ADMIN`, `MANAGER`, `DIRECTRICE_COMMERCIALE`, `PDG`, `DIRECTRICE_OPERATION`, `AGENT`.
+- **Frontend** : `admin`, `manager`, `directrice_commerciale`, `pdg`, `directrice_operation`, `agent`.
+- Tout nouveau rôle doit être ajouté dans Prisma, les schémas Zod (`/api/users`), `AuthContext`, `roles.ts` et `group-scope-roles.ts` si périmètre groupe.

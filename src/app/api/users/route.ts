@@ -1,5 +1,6 @@
 import type { Role } from '@/lib/auth';
 import { requireRole } from '@/lib/auth';
+import { hasGroupCompanyScope } from '@/lib/group-scope-roles';
 import { hashPassword } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
 import { sendWelcomeEmail } from '@/lib/welcome-email';
@@ -11,7 +12,14 @@ const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   role: z
-    .enum(['ADMIN', 'MANAGER', 'DIRECTRICE_COMMERCIALE', 'AGENT'])
+    .enum([
+      'ADMIN',
+      'MANAGER',
+      'DIRECTRICE_COMMERCIALE',
+      'PDG',
+      'DIRECTRICE_OPERATION',
+      'AGENT',
+    ])
     .default('AGENT'),
   // optionnel côté API : on créera / utilisera une company par défaut si absent
   companyId: z.string().optional(),
@@ -22,7 +30,14 @@ const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   role: z
-    .enum(['ADMIN', 'MANAGER', 'DIRECTRICE_COMMERCIALE', 'AGENT'])
+    .enum([
+      'ADMIN',
+      'MANAGER',
+      'DIRECTRICE_COMMERCIALE',
+      'PDG',
+      'DIRECTRICE_OPERATION',
+      'AGENT',
+    ])
     .optional(),
 });
 
@@ -30,6 +45,8 @@ const userRoleFilterSchema = z.enum([
   'ADMIN',
   'MANAGER',
   'DIRECTRICE_COMMERCIALE',
+  'PDG',
+  'DIRECTRICE_OPERATION',
   'AGENT',
 ]);
 
@@ -58,7 +75,7 @@ export async function GET(req: NextRequest) {
     let filterCompanyId = currentUser.companyId;
 
     if (companyIdParam) {
-      if (currentUser.role !== 'DIRECTRICE_COMMERCIALE') {
+      if (!hasGroupCompanyScope(currentUser.role)) {
         return NextResponse.json(
           { error: 'Filtre entreprise non autorisé' },
           { status: 403 },

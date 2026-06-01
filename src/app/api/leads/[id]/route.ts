@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { hasGroupCompanyScope } from "@/lib/group-scope-roles";
 import { agentCanAccessUnassignedLegacyLead } from "@/lib/agentLegacyLeadAccess";
 
 /** GET /api/leads/[id] - Récupère un lead avec sa société */
@@ -58,8 +59,8 @@ export async function GET(
     }
 
     // Multi-tenant: accessible dans la société de l'utilisateur.
-    // DIRECTRICE_COMMERCIALE: accès global (multi-entreprises).
-    if (user.role !== "DIRECTRICE_COMMERCIALE" && lead.companyId !== user.companyId) {
+    // Rôles groupe : accès global (multi-entreprises).
+    if (!hasGroupCompanyScope(user.role) && lead.companyId !== user.companyId) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 

@@ -16,6 +16,8 @@ interface LeadEmailProps {
   recipientName: string;
   senderName?: string;
   companyName?: string;
+  /** Masque le bloc « Bien cordialement » si la signature personnalisée est dans bodyHtml */
+  hideDefaultClosing?: boolean;
 }
 
 export function LeadEmailTemplate({
@@ -24,6 +26,7 @@ export function LeadEmailTemplate({
   recipientName,
   senderName = "Votre équipe commerciale",
   companyName = "Votre CRM",
+  hideDefaultClosing = false,
 }: LeadEmailProps) {
   return (
     <Html>
@@ -67,17 +70,19 @@ export function LeadEmailTemplate({
             <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
           </Section>
 
-          <Text style={{ fontSize: 14, marginTop: 24 }}>
-            Bien cordialement,
-            <br />
-            {senderName}
-            {companyName ? (
-              <>
-                <br />
-                {companyName}
-              </>
-            ) : null}
-          </Text>
+          {!hideDefaultClosing ? (
+            <Text style={{ fontSize: 14, marginTop: 24 }}>
+              Bien cordialement,
+              <br />
+              {senderName}
+              {companyName ? (
+                <>
+                  <br />
+                  {companyName}
+                </>
+              ) : null}
+            </Text>
+          ) : null}
         </Container>
       </Body>
     </Html>

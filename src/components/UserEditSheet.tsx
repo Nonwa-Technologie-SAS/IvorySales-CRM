@@ -1,5 +1,7 @@
 "use client";
 
+import type { FrontendRole } from "@/contexts/AuthContext";
+import { USER_ROLE_FORM_OPTIONS, frontendRoleToApi } from "@/lib/roles";
 import { useEffect, useState, type FormEvent } from "react";
 import { Field } from "@/components/ui/field";
 import UserRoleBadge from "@/components/UserRoleBadge";
@@ -11,16 +13,21 @@ interface UserEditSheetProps {
     id: string;
     name: string;
     email: string;
-    role: "admin" | "manager" | "directrice_commerciale" | "agent";
+    role: FrontendRole;
   } | null;
   onOpenChange: (open: boolean) => void;
-  onUpdated: (user: { id: string; name: string; email: string; role: "admin" | "manager" | "directrice_commerciale" | "agent" }) => void;
+  onUpdated: (user: {
+    id: string;
+    name: string;
+    email: string;
+    role: FrontendRole;
+  }) => void;
 }
 
 export function UserEditSheet({ open, user, onOpenChange, onUpdated }: UserEditSheetProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "manager" | "directrice_commerciale" | "agent">("agent");
+  const [role, setRole] = useState<FrontendRole>("agent");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +56,7 @@ export function UserEditSheet({ open, user, onOpenChange, onUpdated }: UserEditS
           id: user.id,
           name,
           email,
-          role: role.toUpperCase(), // API attend ADMIN | MANAGER | DIRECTRICE_COMMERCIALE | AGENT
+          role: frontendRoleToApi(role),
         }),
       });
 
@@ -103,12 +110,7 @@ export function UserEditSheet({ open, user, onOpenChange, onUpdated }: UserEditS
           <div className="flex flex-col gap-2 mt-1">
             <span className="text-[11px] text-gray-500">Rôle</span>
             <div className="flex gap-2">
-              {([
-                ["agent", "Commercial"],
-                ["manager", "Manager"],
-                ["directrice_commerciale", "Directrice commerciale"],
-                ["admin", "Admin"],
-              ] as const).map(([value, label]) => (
+              {USER_ROLE_FORM_OPTIONS.map(([value, label]) => (
                 <button
                   key={value}
                   type="button"

@@ -21,9 +21,16 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     "blockquote",
     "span",
     "div",
+    "img",
   ],
   allowedAttributes: {
     a: ["href", "title", "target", "rel"],
+    img: ["src", "alt", "width", "height", "style"],
+    div: ["data-crm-email-signature"],
+  },
+  allowedSchemes: ["http", "https", "mailto", "data"],
+  allowedSchemesByTag: {
+    img: ["http", "https", "data", "cid"],
   },
   transformTags: {
     a: (tagName, attribs) => ({

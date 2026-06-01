@@ -5,6 +5,7 @@ import { startOfWeek, endOfWeek } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import { hasGroupCompanyScopeFrontend } from "@/lib/roles";
 import AgendaViewFilter from "@/components/agenda/AgendaViewFilter";
 import type { AgendaView, CustomPeriod } from "@/components/agenda/AgendaViewFilter";
 import AgendaCalendarBlock from "@/components/agenda/AgendaCalendarBlock";
@@ -14,7 +15,7 @@ type UserOpt = { id: string; name: string };
 
 function AgendaPageInner() {
   const { user: authUser } = useAuth();
-  const isDirector = authUser?.role === "directrice_commerciale";
+  const hasGroupScope = hasGroupCompanyScopeFrontend(authUser?.role);
 
   const [view, setView] = useState<AgendaView>("semaine");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -33,7 +34,7 @@ function AgendaPageInner() {
   const [agendaUsers, setAgendaUsers] = useState<UserOpt[]>([]);
 
   useEffect(() => {
-    if (!isDirector) return;
+    if (!hasGroupScope) return;
     const load = async () => {
       try {
         const res = await fetch("/api/companies", { cache: "no-store" });
@@ -55,19 +56,19 @@ function AgendaPageInner() {
       }
     };
     void load();
-  }, [isDirector]);
+  }, [hasGroupScope]);
 
   useEffect(() => {
-    if (!isDirector || !agendaCompanyId) return;
+    if (!hasGroupScope || !agendaCompanyId) return;
     if (companyOptions.length === 0) return;
     if (!companyOptions.some((c) => c.id === agendaCompanyId)) {
       setAgendaCompanyId("");
       setAgendaUserId("");
     }
-  }, [isDirector, agendaCompanyId, companyOptions]);
+  }, [hasGroupScope, agendaCompanyId, companyOptions]);
 
   useEffect(() => {
-    if (!isDirector) return;
+    if (!hasGroupScope) return;
     const loadUsers = async () => {
       try {
         const url = agendaCompanyId.trim()
@@ -86,7 +87,7 @@ function AgendaPageInner() {
       }
     };
     void loadUsers();
-  }, [isDirector, agendaCompanyId]);
+  }, [hasGroupScope, agendaCompanyId]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -106,7 +107,7 @@ function AgendaPageInner() {
       </div>
 
       {/* Filtre entreprise + commerciale (directrice) */}
-      {isDirector && (
+      {hasGroupScope && (
         <section className="rounded-2xl bg-white/80 border border-indigo-100/80 p-3">
           <p className="text-[11px] font-medium text-gray-600 mb-2">
             Filtrer par équipe
@@ -176,7 +177,7 @@ function AgendaPageInner() {
           onCustomRangeChange={view === "période" ? setCustomPeriod : undefined}
           filterCompanyId={agendaCompanyId}
           filterAssignedUserId={agendaUserId}
-          blockFetch={isDirector && !agendaUserId.trim()}
+          blockFetch={hasGroupScope && !agendaUserId.trim()}
         />
       </section>
     </div>

@@ -11,11 +11,9 @@ import {
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
-const STATS_ROLES: FrontendRole[] = [
-  'admin',
-  'manager',
-  'directrice_commerciale',
-];
+import { GROUP_NAV_ROLES } from '@/lib/roles';
+
+const STATS_ROLES: FrontendRole[] = [...GROUP_NAV_ROLES];
 
 const LEFT_TABS = [
   { icon: Home, label: 'Accueil', href: '/' },

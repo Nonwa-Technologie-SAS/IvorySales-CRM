@@ -11,8 +11,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { EMAIL_SIGNATURE_IMAGE } from '@/config/email-signature';
 import { EMAIL_COMPOSE_TEMPLATES } from '@/lib/email-compose-templates';
 import { emailHtmlToPlainSummary } from '@/lib/email-html-shared';
+import {
+  buildComposeHtmlWithSignature,
+  isEmailComposeBodyEmpty,
+} from '@/lib/email-signature';
 import {
   ChevronDown,
   FileX,
@@ -106,6 +111,32 @@ export default function CreateEmailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [defaultSignatureHtml, setDefaultSignatureHtml] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    const loadSignature = async () => {
+      try {
+        const res = await fetch('/api/profile/email-signature', {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { signatureHtml?: string };
+        if (!cancelled) {
+          setDefaultSignatureHtml(data.signatureHtml?.trim() ?? '');
+        }
+      } catch {
+        if (!cancelled) setDefaultSignatureHtml('');
+      }
+    };
+
+    void loadSignature();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -118,19 +149,23 @@ export default function CreateEmailModal({
     setLoading(false);
     setSelectedFiles([]);
     const t = requestAnimationFrame(() => {
-      editorRef.current?.clear();
+      const initial = buildComposeHtmlWithSignature(defaultSignatureHtml);
+      if (initial) {
+        editorRef.current?.setHtml(initial);
+      } else {
+        editorRef.current?.clear();
+      }
     });
     return () => cancelAnimationFrame(t);
-  }, [open, leadId]);
+  }, [open, leadId, defaultSignatureHtml]);
 
   if (!open) return null;
 
   const handleDiscard = () => {
     const html = editorRef.current?.getHtml() ?? '';
-    const plain = emailHtmlToPlainSummary(html, 20_000);
     const hasDraft =
       subject.trim() !== '' ||
-      plain.length > 0 ||
+      !isEmailComposeBodyEmpty(html) ||
       ccRaw.trim() !== '' ||
       bccRaw.trim() !== '' ||
       selectedFiles.length > 0;
@@ -232,9 +267,8 @@ export default function CreateEmailModal({
     }
 
     const bodyHtml = editorRef.current?.getHtml() ?? '';
-    const plain = emailHtmlToPlainSummary(bodyHtml, 50_000);
-    if (plain.length === 0) {
-      setError('Saisissez un message.');
+    if (isEmailComposeBodyEmpty(bodyHtml)) {
+      setError('Saisissez un message au-dessus de votre signature.');
       return;
     }
 
@@ -475,7 +509,12 @@ export default function CreateEmailModal({
               className='flex-1 min-h-0 flex flex-col [&_.ProseMirror]:overflow-y-auto [&_.ProseMirror]:max-h-[min(48vh,420px)]'
             />
             <p className='text-[10px] text-gray-500 mt-1 shrink-0'>
-              Associé à ce prospect
+              Signature image ({EMAIL_SIGNATURE_IMAGE.width}×
+              {EMAIL_SIGNATURE_IMAGE.height} px) en bas du message —{' '}
+              <a href='/profile' className='text-sky-400 hover:underline'>
+                Mon profil
+              </a>
+              .
             </p>
             {selectedFiles.length > 0 && (
               <div className='mt-2 rounded-md border border-gray-700 bg-gray-900/50 p-2'>

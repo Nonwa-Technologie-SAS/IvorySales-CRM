@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { getRoleLabel, normalizeFrontendRole } from '@/lib/roles';
 import {
   getSecondaryNavItemsForRole,
   type SidebarItemDef,
@@ -32,18 +33,10 @@ function isNavItemActive(pathname: string, href: string): boolean {
 }
 
 function roleLabel(role: string | undefined): string {
-  switch (role) {
-    case 'admin':
-      return 'Administrateur';
-    case 'manager':
-      return 'Manager';
-    case 'directrice_commerciale':
-      return 'Directrice commerciale';
-    case 'agent':
-      return 'Commercial';
-    default:
-      return role ?? '';
-  }
+  if (!role) return '';
+  const normalized = normalizeFrontendRole(role);
+  if (normalized === 'admin') return 'Administrateur';
+  return getRoleLabel(normalized);
 }
 
 export default function MobileHeader() {

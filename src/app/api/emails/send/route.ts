@@ -7,9 +7,12 @@ import { prisma } from "@/lib/prisma";
 import { LeadEmailTemplate } from "@/emails/LeadEmail";
 import { sanitizeEmailBodyHtml } from "@/lib/email-html-sanitize";
 import {
-  emailHtmlToPlainSummary,
-  isEmailBodyHtmlEmpty,
-} from "@/lib/email-html-shared";
+  appendEmailSignatureIfMissing,
+  hasEmailSignatureMarker,
+  isEmailComposeBodyEmpty,
+} from "@/lib/email-signature";
+import { embedSignatureImageAsCid } from "@/lib/email-signature-server";
+import { emailHtmlToPlainSummary } from "@/lib/email-html-shared";
 
 const sendEmailSchema = z.object({
   leadId: z.string().min(1),
@@ -84,7 +87,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        emailSignature: true,
+      },
+    });
     if (!user) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 401 });
     }
@@ -116,7 +126,7 @@ export async function POST(req: Request) {
       uploadedFiles = [];
     }
 
-    if (isEmailBodyHtmlEmpty(body.bodyHtml)) {
+    if (isEmailComposeBodyEmpty(body.bodyHtml)) {
       return NextResponse.json(
         { error: "Le message ne peut pas être vide" },
         { status: 400 },
@@ -131,7 +141,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Lead introuvable" }, { status: 404 });
     }
 
-    const safeHtml = sanitizeEmailBodyHtml(body.bodyHtml);
+    const htmlWithSignature = appendEmailSignatureIfMissing(
+      body.bodyHtml,
+      user.emailSignature,
+    );
+    const sanitized = sanitizeEmailBodyHtml(htmlWithSignature);
+    const { html: safeHtml, attachment: signatureAttachment } =
+      await embedSignatureImageAsCid(sanitized, user.emailSignature);
     const cc = body.cc?.length ? body.cc : undefined;
     const bcc = body.bcc?.length ? body.bcc : undefined;
     if (uploadedFiles.length > MAX_ATTACHMENTS) {
@@ -160,21 +176,34 @@ export async function POST(req: Request) {
         subject: body.subject,
         bodyHtml: safeHtml,
         recipientName: body.recipientName || `${lead.firstName} ${lead.lastName}`,
+        senderName: user.name,
         companyName: lead.company?.name,
+        hideDefaultClosing:
+          hasEmailSignatureMarker(safeHtml) || !!user.emailSignature,
       }),
     );
 
     const transporter = createTransport();
-    const attachments =
-      uploadedFiles.length > 0
-        ? await Promise.all(
-            uploadedFiles.map(async (file) => ({
-              filename: file.name,
-              content: Buffer.from(await file.arrayBuffer()),
-              contentType: file.type || undefined,
-            })),
-          )
-        : undefined;
+    const fileAttachments = await Promise.all(
+      uploadedFiles.map(async (file) => ({
+        filename: file.name,
+        content: Buffer.from(await file.arrayBuffer()),
+        contentType: file.type || undefined,
+      })),
+    );
+    const attachments = [
+      ...fileAttachments,
+      ...(signatureAttachment
+        ? [
+            {
+              filename: signatureAttachment.filename,
+              content: signatureAttachment.content,
+              contentType: signatureAttachment.contentType,
+              cid: signatureAttachment.cid,
+            },
+          ]
+        : []),
+    ];
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: body.to,
@@ -182,7 +211,7 @@ export async function POST(req: Request) {
       bcc,
       subject: body.subject,
       html,
-      attachments,
+      attachments: attachments.length > 0 ? attachments : undefined,
     });
 
     const plainSummary = emailHtmlToPlainSummary(safeHtml, 4000);

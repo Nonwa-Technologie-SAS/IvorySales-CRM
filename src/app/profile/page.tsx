@@ -5,6 +5,7 @@ import NeumoCard from "@/components/NeumoCard";
 import { withDashboardLayout } from "@/components/layouts/withDashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdminOrManagerLike } from "@/lib/roles";
+import { EmailSignatureSettings } from "@/components/profile/EmailSignatureSettings";
 import {
   Mail,
   Briefcase,
@@ -748,6 +749,8 @@ function ProfilePageInner({
                 </div>
               )}
             </div>
+
+            <EmailSignatureSettings />
           </NeumoCard>
           )}
 

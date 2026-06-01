@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth";
+import { hasGroupCompanyScope } from "@/lib/group-scope-roles";
 import { getLegacyUnassignedLeadIdsForAgent } from "@/lib/agentLegacyLeadAccess";
 
 export async function GET(req: Request) {
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const companyIdParam = url.searchParams.get("companyId");
     let effectiveCompanyId = user.companyId;
-    if (user.role === "DIRECTRICE_COMMERCIALE" && companyIdParam) {
+    if (hasGroupCompanyScope(user.role) && companyIdParam) {
       const exists = await prisma.company.findUnique({
         where: { id: companyIdParam },
         select: { id: true },

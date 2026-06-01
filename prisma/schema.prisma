@@ -76,6 +76,8 @@ model User {
   mfaEnabled Boolean @default(false)
   /// Secret TOTP (base32) pour génération des codes OTP ; présent si MFA configuré ou en attente de vérification
   mfaSecret  String?
+  /// Chemin public de l’image signature (/uploads/signatures/…) ou ancien HTML
+  emailSignature String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -306,6 +308,8 @@ enum Role {
   ADMIN
   MANAGER
   DIRECTRICE_COMMERCIALE
+  PDG
+  DIRECTRICE_OPERATION
   AGENT
 }
 

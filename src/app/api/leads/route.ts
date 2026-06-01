@@ -4,6 +4,7 @@ import {
   getLegacyUnassignedLeadIdsForAgent,
 } from '@/lib/agentLegacyLeadAccess';
 import { getCurrentUser } from '@/lib/auth';
+import { hasGroupCompanyScope } from '@/lib/group-scope-roles';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -77,9 +78,9 @@ export async function GET(req: Request) {
     const skipParam = url.searchParams.get('skip');
 
     // Par défaut: isolation par entreprise
-    // Exception: DIRECTRICE_COMMERCIALE peut lire d'autres entreprises via companyId=...
+    // Rôles groupe : peuvent lire d'autres entreprises via companyId=...
     let effectiveCompanyId = user.companyId;
-    if (user.role === 'DIRECTRICE_COMMERCIALE' && companyIdParam) {
+    if (hasGroupCompanyScope(user.role) && companyIdParam) {
       const exists = await prisma.company.findUnique({
         where: { id: companyIdParam },
         select: { id: true },

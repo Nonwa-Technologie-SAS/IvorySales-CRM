@@ -1,7 +1,8 @@
-import 'dotenv/config';
+import { loadEnvForPrisma } from './prisma/load-env';
 import { defineConfig, env } from 'prisma/config';
 
-// Configuration Prisma 7 : URL de connexion PostgreSQL déplacée ici
+loadEnvForPrisma();
+
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   datasource: {

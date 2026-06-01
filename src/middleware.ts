@@ -1,5 +1,12 @@
+import { GROUP_SCOPE_ROLES } from '@/lib/group-scope-roles';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+
+const ROLES_ADMIN_MANAGER_PAGES = new Set<string>([
+  'ADMIN',
+  'MANAGER',
+  ...GROUP_SCOPE_ROLES,
+]);
 
 const AUTH_COOKIE = 'auth_session';
 const AUTH_ROLE_COOKIE = 'auth_role';
@@ -64,12 +71,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Pages Utilisateurs / Paramètres : réservées à ADMIN, MANAGER et DIRECTRICE_COMMERCIALE (pas AGENT)
+  // Pages Utilisateurs / Paramètres : ADMIN, MANAGER et rôles groupe (pas AGENT)
   if (hasAuth && isAdminOrManagerOnlyPath(pathname)) {
     // On ne bloque que si un rôle explicite non autorisé est présent.
     // Si le cookie de rôle est absent (anciens logins), on laisse passer
     // et on se repose sur les gardes de page + API.
-    if (role && role !== 'ADMIN' && role !== 'MANAGER' && role !== 'DIRECTRICE_COMMERCIALE') {
+    if (role && !ROLES_ADMIN_MANAGER_PAGES.has(role)) {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }

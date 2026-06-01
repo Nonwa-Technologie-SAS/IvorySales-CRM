@@ -1,4 +1,5 @@
 import { getCurrentUser, resolveGroupCompanyScope } from '@/lib/auth';
+import { hasGroupCompanyScope } from '@/lib/group-scope-roles';
 import { getPeriodLabel } from '@/lib/goalPeriods';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
@@ -101,11 +102,11 @@ export async function GET(req: Request) {
     return NextResponse.json(dto);
   }
 
-  // À partir d'ici: ADMIN, MANAGER ou DIRECTRICE_COMMERCIALE
+  // À partir d'ici: ADMIN, MANAGER ou rôles groupe (vision multi-entreprises)
   if (
     currentUser.role !== 'ADMIN' &&
     currentUser.role !== 'MANAGER' &&
-    currentUser.role !== 'DIRECTRICE_COMMERCIALE'
+    !hasGroupCompanyScope(currentUser.role)
   ) {
     return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
   }

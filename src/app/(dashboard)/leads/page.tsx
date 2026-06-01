@@ -23,7 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
-import { isAdminOrManagerLike } from '@/lib/roles';
+import { hasGroupCompanyScopeFrontend, isAdminOrManagerLike } from '@/lib/roles';
 import {
   ChevronLeft,
   ChevronRight,
@@ -154,19 +154,19 @@ function LeadsPageInner() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
 
   const isManagerOrAdmin = isAdminOrManagerLike(authUser?.role);
-  const isDirector = authUser?.role === 'directrice_commerciale';
+  const hasGroupScope = hasGroupCompanyScopeFrontend(authUser?.role);
 
   // Entreprise courante par défaut pour la directrice
   useEffect(() => {
-    if (!isDirector) return;
+    if (!hasGroupScope) return;
     if (!selectedCompanyId && authUser?.company?.id) {
       setSelectedCompanyId(authUser.company.id);
     }
-  }, [isDirector, selectedCompanyId, authUser?.company?.id]);
+  }, [hasGroupScope, selectedCompanyId, authUser?.company?.id]);
 
   // Liste des entreprises (pour la directrice)
   useEffect(() => {
-    if (!isDirector) return;
+    if (!hasGroupScope) return;
     (async () => {
       try {
         const res = await fetch('/api/companies', { cache: 'no-store' });
@@ -194,7 +194,7 @@ function LeadsPageInner() {
         // silencieux
       }
     })();
-  }, [authUser?.company?.id, isDirector, selectedCompanyId]);
+  }, [authUser?.company?.id, hasGroupScope, selectedCompanyId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -213,7 +213,7 @@ function LeadsPageInner() {
   // Commerciaux (AGENT) de l'entreprise : pour directrice → entreprise sélectionnée
   useEffect(() => {
     if (!isManagerOrAdmin) return;
-    if (isDirector && !selectedCompanyId) {
+    if (hasGroupScope && !selectedCompanyId) {
       setUserOptions([]);
       return;
     }
@@ -221,7 +221,7 @@ function LeadsPageInner() {
     (async () => {
       try {
         const qs = new URLSearchParams({ role: 'AGENT' });
-        if (isDirector && selectedCompanyId) {
+        if (hasGroupScope && selectedCompanyId) {
           qs.set('companyId', selectedCompanyId);
         }
         const res = await fetch(`/api/users?${qs.toString()}`, {
@@ -249,13 +249,13 @@ function LeadsPageInner() {
         setUserOptions([]);
       }
     })();
-  }, [isManagerOrAdmin, isDirector, selectedCompanyId]);
+  }, [isManagerOrAdmin, hasGroupScope, selectedCompanyId]);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (isDirector && selectedCompanyId) {
+      if (hasGroupScope && selectedCompanyId) {
         params.set('companyId', selectedCompanyId);
       }
       if (filters.status.length) {
@@ -302,7 +302,7 @@ function LeadsPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [filters, isDirector, selectedCompanyId]);
+  }, [filters, hasGroupScope, selectedCompanyId]);
 
   useEffect(() => {
     void fetchLeads();
@@ -377,7 +377,7 @@ function LeadsPageInner() {
     try {
       setExporting(true);
       const params = new URLSearchParams();
-      if (isDirector && selectedCompanyId)
+      if (hasGroupScope && selectedCompanyId)
         params.set('companyId', selectedCompanyId);
       const res = await fetch(
         `/api/leads/export${params.toString() ? `?${params.toString()}` : ''}`,
@@ -548,7 +548,7 @@ function LeadsPageInner() {
 
           <div
             className={`grid grid-cols-1 gap-3 md:items-end md:gap-3 ${
-              isDirector
+              hasGroupScope
                 ? 'md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
                 : 'md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto]'
             }`}
@@ -573,7 +573,7 @@ function LeadsPageInner() {
               </select>
             </label>
 
-            {isDirector && (
+            {hasGroupScope && (
               <label className='flex min-w-0 flex-col gap-1'>
                 <span className='text-[11px] text-gray-500'>Entreprise</span>
                 <select
@@ -602,7 +602,7 @@ function LeadsPageInner() {
 
             <div
               className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap ${
-                isDirector
+                hasGroupScope
                   ? 'md:col-span-2 lg:col-span-1 lg:flex-nowrap lg:justify-end'
                   : 'md:col-span-2 lg:col-span-1 lg:flex-nowrap lg:justify-end'
               }`}
